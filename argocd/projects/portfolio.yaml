@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: portfolio
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: jcrlabs portfolio projects
+  sourceRepos:
+    - https://github.com/jonathanCaamano/*
+  destinations:
+    - namespace: home
+      server: https://kubernetes.default.svc
+    - namespace: home-test
+      server: https://kubernetes.default.svc
+    - namespace: inventory
+      server: https://kubernetes.default.svc
+    - namespace: inventory-test
+      server: https://kubernetes.default.svc
+    - namespace: blog
+      server: https://kubernetes.default.svc
+    - namespace: blog-test
+      server: https://kubernetes.default.svc
+    - namespace: dashboard
+      server: https://kubernetes.default.svc
+    - namespace: dashboard-test
+      server: https://kubernetes.default.svc
+    - namespace: chat
+      server: https://kubernetes.default.svc
+    - namespace: chat-test
+      server: https://kubernetes.default.svc
+    - namespace: fincontrol
+      server: https://kubernetes.default.svc
+    - namespace: fincontrol-test
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  orphanedResources:
+    warn: true
