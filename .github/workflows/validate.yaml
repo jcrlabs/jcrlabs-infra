@@ -1,0 +1,74 @@
+name: Validate IaC
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  yamllint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run yamllint
+        run: |
+          yamllint -d '{extends: default, rules: {line-length: {max: 160}, truthy: {allowed-values: ["true", "false"]}}}' \
+            ansible/ k8s/ argocd/ monitoring/
+
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Run ansible-lint
+        run: ansible-lint ansible/
+        continue-on-error: true  # warn only until rules are tuned
+
+  kubeval:
+    name: Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate K8s manifests
+        run: |
+          find k8s/ argocd/ -name '*.yaml' | \
+            xargs kubeconform \
+              -strict \
+              -ignore-missing-schemas \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+
+  check-sealed-secrets:
+    name: Check no plaintext secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect plaintext Kubernetes secrets
+        run: |
+          if grep -r 'kind: Secret' k8s/ --include='*.yaml' | grep -v 'SealedSecret'; then
+            echo "ERROR: Found plaintext Kubernetes Secret. Use Sealed Secrets instead."
+            exit 1
+          fi
+          echo "No plaintext secrets found."
