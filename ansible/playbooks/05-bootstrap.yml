@@ -1,0 +1,76 @@
+---
+- name: Bootstrap cluster addons (MetalLB, cert-manager, ArgoCD, Sealed Secrets)
+  hosts: control_plane
+  become: false
+  vars:
+    kubeconfig: "/home/{{ ansible_user }}/.kube/config"
+  tasks:
+    # MetalLB
+    - name: Install MetalLB
+      command: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/{{ metallb_version }}/config/manifests/metallb-native.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Apply MetalLB config from repo
+      command: kubectl apply -k k8s/metallb/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      args:
+        chdir: "{{ playbook_dir }}/../"
+      changed_when: true
+
+    # cert-manager
+    - name: Install cert-manager CRDs
+      command: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Wait for cert-manager to be ready
+      command: kubectl rollout status deployment/cert-manager -n cert-manager --timeout=120s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Apply cert-manager config
+      command: kubectl apply -k k8s/cert-manager/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      args:
+        chdir: "{{ playbook_dir }}/../"
+      changed_when: true
+
+    # Sealed Secrets
+    - name: Install Sealed Secrets controller
+      command: kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/{{ sealed_secrets_version }}/controller.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    # ArgoCD
+    - name: Create argocd namespace
+      command: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Install ArgoCD
+      command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Wait for ArgoCD to be ready
+      command: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Apply ArgoCD projects and ApplicationSets
+      command: kubectl apply -k argocd/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      args:
+        chdir: "{{ playbook_dir }}/../"
+      changed_when: true

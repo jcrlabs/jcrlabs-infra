@@ -1,0 +1,33 @@
+---
+# Kubernetes
+kubernetes_version: "1.30"
+kubernetes_cgroup_driver: systemd
+
+# Containerd
+containerd_version: "1.7"
+
+# Networking
+pod_network_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+cluster_dns: "10.96.0.10"
+
+# Calico
+calico_version: "v3.28.0"
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml"
+
+# MetalLB
+metallb_version: "v0.14.5"
+metallb_ip_range: "192.168.1.200-192.168.1.220"
+
+# ArgoCD
+argocd_version: "v2.11.0"
+
+# cert-manager
+cert_manager_version: "v1.14.5"
+
+# Sealed Secrets
+sealed_secrets_version: "v0.26.2"
+
+# Domain
+base_domain: "jcrlabs.net"
+let_encrypt_email: "admin@jcrlabs.net"
