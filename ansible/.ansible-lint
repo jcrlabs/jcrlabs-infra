@@ -1,0 +1,13 @@
+---
+skip_list:
+  - yaml[truthy]
+  - name[casing]
+  - no-free-form
+  - fqcn[action-core]
+  - galaxy[no-runtime-deps]
+  - meta-no-info
+
+exclude_paths:
+  - ansible/roles/
+
+profile: min

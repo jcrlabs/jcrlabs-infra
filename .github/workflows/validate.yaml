@@ -23,8 +23,11 @@ jobs:
 
       - name: Run yamllint
         run: |
-          yamllint -d '{extends: default, rules: {line-length: {max: 160}, truthy: {allowed-values: ["true", "false"]}}}' \
-            ansible/ k8s/ argocd/ monitoring/
+          yamllint -c .yamllint.yaml \
+            ansible/ k8s/ argocd/ \
+            monitoring/kube-prometheus-stack/ \
+            monitoring/loki/ \
+            monitoring/promtail/
 
   ansible-lint:
     name: Ansible Lint
@@ -32,14 +35,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ansible-lint
-        run: pip install ansible-lint
+      - name: Install ansible + lint
+        run: pip install ansible-lint ansible-core
 
       - name: Run ansible-lint
-        run: ansible-lint ansible/
-        continue-on-error: true  # warn only until rules are tuned
+        run: ansible-lint ansible/playbooks/
+        working-directory: ${{ github.workspace }}
 
-  kubeval:
+  kubeconform:
     name: Kubernetes Manifest Validation
     runs-on: ubuntu-latest
     steps:
@@ -47,28 +50,42 @@ jobs:
 
       - name: Install kubeconform
         run: |
-          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
-          sudo mv kubeconform /usr/local/bin/
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/
 
-      - name: Validate K8s manifests
+      - name: Validate core K8s manifests
         run: |
-          find k8s/ argocd/ -name '*.yaml' | \
-            xargs kubeconform \
-              -strict \
-              -ignore-missing-schemas \
-              -schema-location default \
-              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          find k8s/namespaces/ k8s/metallb/ k8s/cert-manager/ -name '*.yaml' \
+            ! -name 'kustomization.yaml' \
+            | xargs kubeconform \
+                -strict \
+                -ignore-missing-schemas \
+                -kubernetes-version 1.30.0 \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
-  check-sealed-secrets:
-    name: Check no plaintext secrets
+      - name: Validate ArgoCD manifests
+        run: |
+          find argocd/ -name '*.yaml' ! -name 'kustomization.yaml' \
+            | xargs kubeconform \
+                -ignore-missing-schemas \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+
+  check-secrets:
+    name: No plaintext secrets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect plaintext Kubernetes secrets
+      - name: Detect plaintext Kubernetes Secrets
         run: |
-          if grep -r 'kind: Secret' k8s/ --include='*.yaml' | grep -v 'SealedSecret'; then
-            echo "ERROR: Found plaintext Kubernetes Secret. Use Sealed Secrets instead."
+          if grep -r --include='*.yaml' 'kind: Secret' k8s/ \
+               | grep -v 'kind: SealedSecret' \
+               | grep -v 'kind: SecretStore' \
+               | grep -v '#'; then
+            echo "ERROR: Found plaintext Kubernetes Secret. Use Sealed Secrets."
             exit 1
           fi
-          echo "No plaintext secrets found."
+          echo "OK: no plaintext secrets found."
