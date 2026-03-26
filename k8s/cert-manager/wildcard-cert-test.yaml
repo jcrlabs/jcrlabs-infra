@@ -1,0 +1,13 @@
+# Wildcard certificate for *-test.jcrlabs.net (test environments)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-jcrlabs-net-test
+  namespace: cert-manager
+spec:
+  secretName: wildcard-jcrlabs-net-test-tls
+  issuerRef:
+    name: letsencrypt-staging
+    kind: ClusterIssuer
+  dnsNames:
+    - "*-test.jcrlabs.net"

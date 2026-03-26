@@ -1,0 +1,12 @@
+# Sealed Secrets are generated with kubeseal and committed here.
+# To create a new sealed secret:
+#   kubectl create secret generic my-secret --dry-run=client -o yaml | \
+#     kubeseal --controller-namespace sealed-secrets --format yaml > my-sealed-secret.yaml
+#
+# Example cloudflare API token (regenerate with kubeseal before applying):
+# kubeseal --fetch-cert --controller-namespace sealed-secrets > pub-cert.pem
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+  # Add sealed secret files here as they are created
+  # - cloudflare-api-token.yaml
