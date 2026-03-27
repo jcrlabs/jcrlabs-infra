@@ -1,10 +1,5 @@
 name: "Bootstrap: Install ArgoCD"
 
-# Workflow manual para instalar ArgoCD + Sealed Secrets
-# sobre el cluster k3d ya existente.
-# Solo se ejecuta una vez (o cuando quieras reinstalar).
-# NO toca el namespace taller-inventario ni nada existente.
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,43 +8,37 @@ on:
         required: true
 
 jobs:
-  check-existing:
-    name: "Verificar que el cluster funciona"
+  healthcheck:
     runs-on: ubuntu-latest
     steps:
-      - name: Health check tallerjcr.jcrlabs.net
-        run: |
+      - run: |
           HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
             --max-time 15 --retry 3 --retry-delay 5 \
             https://tallerjcr.jcrlabs.net)
-          echo "HTTP: $HTTP_CODE"
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
-            echo "::error::tallerjcr.jcrlabs.net no responde antes de instalar. Abortar."
+            echo "::error::tallerjcr.jcrlabs.net no responde. Abortar."
             exit 1
           fi
-          echo "OK: cluster activo antes de instalar ArgoCD"
+          echo "OK: cluster activo (HTTP $HTTP_CODE)"
 
-  install-argocd:
-    name: "Instalar ArgoCD + Sealed Secrets"
+  install:
     runs-on: [self-hosted, homelab]
-    needs: check-existing
+    needs: healthcheck
     steps:
       - name: Validar confirmacion
         run: |
           if [ "${{ github.event.inputs.confirm }}" != "INSTALL" ]; then
-            echo "::error::Debes escribir INSTALL para confirmar"
+            echo "::error::Escribe INSTALL para confirmar"
             exit 1
           fi
 
-      - uses: actions/checkout@v4
-
-      - name: Verificar que ArgoCD no está ya instalado
+      - name: Setup kubectl
         run: |
-          if kubectl get namespace argocd &>/dev/null; then
-            echo "::warning::ArgoCD ya existe en el cluster. Continuando con upgrade..."
-          else
-            echo "ArgoCD no instalado. Procediendo con instalacion fresca."
-          fi
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - uses: actions/checkout@v4
 
       - name: Add helm repos
         run: |
@@ -60,17 +49,14 @@ jobs:
       - name: Instalar Sealed Secrets
         run: |
           helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
-            --namespace sealed-secrets \
-            --create-namespace \
+            --namespace sealed-secrets --create-namespace \
             --set fullnameOverride=sealed-secrets-controller \
-            --atomic \
-            --timeout 3m
+            --atomic --timeout 3m
 
       - name: Instalar ArgoCD
         run: |
           helm upgrade --install argocd argo/argo-cd \
-            --namespace argocd \
-            --create-namespace \
+            --namespace argocd --create-namespace \
             --set configs.params.server\.insecure=true \
             --set server.ingress.enabled=true \
             --set server.ingress.ingressClassName=nginx \
@@ -78,22 +64,20 @@ jobs:
             --set 'server.ingress.hosts[0]=argocd.jcrlabs.net' \
             --set 'server.ingress.tls[0].secretName=argocd-tls' \
             --set 'server.ingress.tls[0].hosts[0]=argocd.jcrlabs.net' \
-            --atomic \
-            --timeout 5m
+            --atomic --timeout 5m
 
-      - name: Esperar a que ArgoCD esté listo
+      - name: Esperar ArgoCD
         run: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
 
       - name: Aplicar AppProject y ApplicationSets
         run: kubectl apply -k argocd/
 
-      - name: Obtener password inicial de ArgoCD
+      - name: Password inicial ArgoCD
         run: |
-          echo "=== ArgoCD listo ==="
-          echo "URL: https://argocd.jcrlabs.net"
-          echo "User: admin"
           PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
             -o jsonpath="{.data.password}" | base64 -d)
+          echo "URL : https://argocd.jcrlabs.net"
+          echo "User: admin"
           echo "Pass: $PASS"
 
       - name: Health check final
@@ -101,9 +85,12 @@ jobs:
           HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
             --max-time 15 --retry 3 --retry-delay 5 \
             https://tallerjcr.jcrlabs.net)
-          echo "HTTP tallerjcr.jcrlabs.net: $HTTP_CODE"
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
             echo "::error::tallerjcr.jcrlabs.net NO responde tras instalar ArgoCD"
             exit 1
           fi
-          echo "OK: tallerjcr.jcrlabs.net sigue activo tras la instalacion"
+          echo "OK: tallerjcr.jcrlabs.net sigue activo"
+
+      - name: Limpiar kubeconfig
+        if: always()
+        run: rm -f ~/.kube/config
