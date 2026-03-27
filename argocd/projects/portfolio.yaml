@@ -8,7 +8,7 @@ metadata:
 spec:
   description: jcrlabs portfolio projects
   sourceRepos:
-    - https://github.com/jonathanCaamano/*
+    - https://github.com/jcrlabs/*
   destinations:
     - namespace: home
       server: https://kubernetes.default.svc
@@ -33,6 +33,10 @@ spec:
     - namespace: fincontrol
       server: https://kubernetes.default.svc
     - namespace: fincontrol-test
+      server: https://kubernetes.default.svc
+    - namespace: portfolio
+      server: https://kubernetes.default.svc
+    - namespace: portfolio-test
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ''
