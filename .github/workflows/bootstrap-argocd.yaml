@@ -63,8 +63,15 @@ jobs:
             --set server.ingressGrpc.enabled=false \
             --atomic --timeout 5m
 
-      - name: Esperar ArgoCD
-        run: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
+      # Garantiza que el pod lee server.insecure=true del ConfigMap
+      # El helm --set a veces no se refleja hasta el siguiente restart
+      - name: Forzar insecure mode en ConfigMap y reiniciar
+        run: |
+          kubectl patch configmap argocd-cmd-params-cm -n argocd \
+            --type=merge \
+            -p='{"data":{"server.insecure":"true"}}'
+          kubectl rollout restart deployment argocd-server -n argocd
+          kubectl rollout status deployment argocd-server -n argocd --timeout=120s
 
       - name: Aplicar AppProject y ApplicationSets
         run: kubectl apply -k argocd/
