@@ -1,0 +1,35 @@
+name: Validate IaC
+
+on:
+  push:
+    branches: [main, develop, 'claude/**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  yamllint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install yamllint
+      - run: yamllint -d relaxed k8s/ argocd/
+
+  check-secrets:
+    name: No plaintext secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          FOUND=$(grep -rl --include='*.yaml' 'kind: Secret' k8s/ 2>/dev/null || true)
+          if [ -z "$FOUND" ]; then
+            echo "OK: no secrets encontrados."
+            exit 0
+          fi
+          for f in $FOUND; do
+            if ! grep -q 'SealedSecret' "$f"; then
+              echo "ERROR: $f contiene un Secret en texto plano. Usa Sealed Secrets."
+              exit 1
+            fi
+          done
+          echo "OK: solo SealedSecrets encontrados."

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: infra-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - name: kube-prometheus-stack
+            namespace: monitoring
+            path: monitoring/kube-prometheus-stack
+          - name: loki
+            namespace: monitoring
+            path: monitoring/loki
+          - name: promtail
+            namespace: monitoring
+            path: monitoring/promtail
+  template:
+    metadata:
+      name: "infra-{{ .name }}"
+      labels:
+        env: production
+        tier: infra
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jonathanCaamano/jcrlabs-infra.git
+        targetRevision: HEAD
+        path: "{{ .path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
