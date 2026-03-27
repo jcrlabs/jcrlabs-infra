@@ -26,7 +26,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/jonathanCaamano/jcrlabs-infra.git
+        repoURL: https://github.com/jcrlabs/jcrlabs-infra.git
         targetRevision: HEAD
         path: "{{ .path }}"
       destination:
