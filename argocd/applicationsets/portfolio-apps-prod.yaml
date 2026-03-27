@@ -12,6 +12,9 @@ spec:
         revision: HEAD
         directories:
           - path: "k8s/apps/*/"
+          # inventory se gestiona manualmente hasta que se migre a GitOps
+          - path: "k8s/apps/inventory/"
+            exclude: true
   template:
     metadata:
       name: "{{ .path.basename }}"

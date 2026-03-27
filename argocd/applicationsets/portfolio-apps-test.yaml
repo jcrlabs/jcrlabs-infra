@@ -12,6 +12,9 @@ spec:
         revision: HEAD
         directories:
           - path: "k8s/apps-test/*/"
+          # inventory-test excluido hasta migracion a GitOps
+          - path: "k8s/apps-test/inventory/"
+            exclude: true
   template:
     metadata:
       name: "{{ .path.basename }}-test"

@@ -1,0 +1,119 @@
+name: "Shield: Restore from Backup"
+
+# Solo se puede disparar manualmente.
+# Proporciona el run_id del backup a restaurar.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'GitHub run_id del backup a restaurar (ver Actions → Pre-deploy Backup)'
+        required: true
+      confirm:
+        description: 'Escribe RESTORE para confirmar'
+        required: true
+      namespace_only:
+        description: 'Solo restaurar namespace inventory (true/false)'
+        required: false
+        default: 'true'
+
+jobs:
+  validate:
+    name: "Validar confirmacion"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirm input
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
+            echo "::error::Debes escribir RESTORE en el campo confirm para continuar"
+            exit 1
+          fi
+          echo "Confirmacion OK. Restaurando backup run_id: ${{ github.event.inputs.backup_run_id }}"
+
+  restore:
+    name: "Restore cluster state"
+    runs-on: [self-hosted, homelab]
+    needs: validate
+    steps:
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cluster-backup-${{ github.event.inputs.backup_run_id }}
+          path: /tmp/restore/
+
+      - name: Descomprimir backup
+        run: |
+          cd /tmp/restore
+          tar xzf jcrlabs-backup-${{ github.event.inputs.backup_run_id }}.tar.gz
+          echo "Contenido del backup:"
+          ls -la /tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}/
+
+      - name: Leer metadata del backup
+        run: |
+          cat /tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}/backup-metadata.txt
+
+      - name: Health check ANTES de restaurar
+        run: |
+          echo "Estado actual del namespace inventory:"
+          kubectl get all -n inventory || echo "namespace inventory no responde"
+
+      # --- Restaurar namespace inventory ---
+      - name: Restaurar recursos del namespace inventory
+        if: github.event.inputs.namespace_only == 'true'
+        run: |
+          BACKUP_PATH="/tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}"
+
+          echo ">> Aplicando backup de inventory..."
+          kubectl apply -f $BACKUP_PATH/inventory-resources.yaml
+
+          echo ">> Verificando pods..."
+          kubectl rollout status deployment -n inventory --timeout=120s
+          echo "OK: namespace inventory restaurado"
+
+      # --- Restaurar etcd (solo si namespace_only=false) ---
+      - name: Restaurar etcd snapshot (cluster completo)
+        if: github.event.inputs.namespace_only == 'false'
+        run: |
+          BACKUP_PATH="/tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}"
+
+          echo "::warning::Restaurando etcd. El cluster se reiniciara."
+
+          # Copiar snapshot al container
+          SNAPSHOT=$(ls $BACKUP_PATH/etcd-snapshots/*.db 2>/dev/null | head -1)
+          if [ -z "$SNAPSHOT" ]; then
+            echo "::error::No se encontro snapshot de etcd en el backup"
+            exit 1
+          fi
+
+          docker cp "$SNAPSHOT" k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/
+
+          SNAP_NAME=$(basename $SNAPSHOT .db)
+          docker exec k3d-jcrlabs-server-0 \
+            k3s etcd-snapshot restore --name $SNAP_NAME
+
+          echo "OK: etcd restaurado. Esperando que el cluster vuelva..."
+          sleep 30
+          kubectl wait --for=condition=Ready nodes --all --timeout=180s
+
+      - name: Health check POST-restauracion
+        run: |
+          echo "Estado del namespace inventory tras la restauracion:"
+          kubectl get all -n inventory
+
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            --retry 5 \
+            --retry-delay 10 \
+            https://tallerjcr.jcrlabs.net)
+
+          echo "HTTP code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net NO responde tras la restauracion (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+          echo "OK: tallerjcr.jcrlabs.net activo tras restauracion (HTTP $HTTP_CODE)"
+
+      - name: Limpiar directorio temporal
+        if: always()
+        run: rm -rf /tmp/restore/

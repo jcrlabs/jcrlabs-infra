@@ -1,0 +1,214 @@
+name: "Shield: Pre-deploy Backup"
+
+# Se dispara antes de que ArgoCD pueda sincronizar cambios
+# que afecten al cluster. Requiere un runner self-hosted en el host k3d.
+#
+# SETUP del runner (una sola vez en el host):
+#   1. GitHub → Settings → Actions → Runners → New self-hosted runner
+#   2. Seleccionar Linux x64 y ejecutar los comandos que proporciona GitHub
+#   3. Cuando pregunte labels, poner: self-hosted,homelab
+#   4. Instalar como servicio: sudo ./svc.sh install && sudo ./svc.sh start
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'k8s/**'
+      - 'argocd/**'
+      - 'ansible/**'
+      - 'monitoring/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Motivo del backup manual'
+        required: false
+        default: 'manual'
+
+jobs:
+  # ---------------------------------------------------------------
+  # JOB 1: Health check desde GitHub Actions (runner público)
+  # Verifica que tallerjcr.jcrlabs.net responde ANTES del cambio
+  # ---------------------------------------------------------------
+  healthcheck-before:
+    name: "Health check tallerjcr.jcrlabs.net"
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+    steps:
+      - name: Check HTTP status
+        id: check
+        run: |
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            --retry 3 \
+            --retry-delay 5 \
+            https://tallerjcr.jcrlabs.net)
+
+          echo "HTTP code: $HTTP_CODE"
+          echo "status=$HTTP_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net devuelve HTTP $HTTP_CODE antes del deploy"
+            exit 1
+          fi
+          echo "OK: tallerjcr.jcrlabs.net responde HTTP $HTTP_CODE"
+
+      - name: Check API health endpoint
+        run: |
+          RESPONSE=$(curl -sf --max-time 10 https://tallerjcr.jcrlabs.net/api/health || echo "FAILED")
+          echo "Health response: $RESPONSE"
+          if [ "$RESPONSE" = "FAILED" ]; then
+            echo "::warning::El endpoint /api/health no responde (puede no existir aún)"
+          fi
+
+  # ---------------------------------------------------------------
+  # JOB 2: Backup completo (runner self-hosted en el host k3d)
+  # ---------------------------------------------------------------
+  backup:
+    name: "Backup cluster state"
+    runs-on: [self-hosted, homelab]
+    needs: healthcheck-before
+    env:
+      BACKUP_DIR: /tmp/jcrlabs-backup-${{ github.run_id }}
+      BACKUP_DATE: ${{ github.run_id }}
+    steps:
+      - name: Crear directorio de backup
+        run: mkdir -p $BACKUP_DIR
+
+      # --- Namespace inventory (el más crítico) ---
+      - name: Backup namespace inventory (todos los recursos)
+        run: |
+          echo ">> Exportando namespace inventory..."
+          kubectl get all,ingress,configmap,pvc \
+            -n inventory -o yaml \
+            > $BACKUP_DIR/inventory-resources.yaml
+
+          # Secrets por separado (más cuidado)
+          kubectl get secrets -n inventory -o yaml \
+            > $BACKUP_DIR/inventory-secrets.yaml
+
+          echo "OK: namespace inventory exportado"
+        continue-on-error: false
+
+      - name: Backup eventos recientes del namespace inventory
+        run: |
+          kubectl get events -n inventory \
+            --sort-by='.lastTimestamp' \
+            > $BACKUP_DIR/inventory-events.txt
+        continue-on-error: true
+
+      # --- Sealed Secrets (CRÍTICO: sin esta clave no se pueden descifrar secrets) ---
+      - name: Backup Sealed Secrets controller key
+        run: |
+          echo ">> Buscando Sealed Secrets key..."
+          KEY=$(kubectl get secret \
+            -n sealed-secrets \
+            -l sealedsecrets.bitnami.com/sealed-secrets-key \
+            -o yaml 2>/dev/null || echo "")
+
+          if [ -z "$KEY" ]; then
+            echo "::warning::Sealed Secrets no instalado aún, saltando"
+          else
+            echo "$KEY" > $BACKUP_DIR/sealed-secrets-key.yaml
+            echo "OK: Sealed Secrets key exportada"
+          fi
+        continue-on-error: true
+
+      # --- cert-manager (wildcard TLS) ---
+      - name: Backup wildcard TLS secret
+        run: |
+          kubectl get secret wildcard-jcrlabs-tls \
+            -n cert-manager -o yaml \
+            > $BACKUP_DIR/wildcard-jcrlabs-tls.yaml
+          echo "OK: wildcard TLS secret exportado"
+        continue-on-error: true
+
+      - name: Backup ClusterIssuers
+        run: |
+          kubectl get clusterissuers -o yaml \
+            > $BACKUP_DIR/clusterissuers.yaml
+        continue-on-error: true
+
+      # --- Helm releases instalados ---
+      - name: Backup Helm releases
+        run: |
+          helm list -A -o yaml > $BACKUP_DIR/helm-releases.yaml
+
+          for release in $(helm list -A -q); do
+            ns=$(helm list -A | grep "^$release" | awk '{print $2}')
+            helm get values $release -n $ns > $BACKUP_DIR/helm-values-${release}.yaml 2>/dev/null || true
+          done
+        continue-on-error: true
+
+      # --- etcd snapshot (k3s nativo) ---
+      - name: etcd snapshot via k3s
+        run: |
+          echo ">> Creando etcd snapshot..."
+          docker exec k3d-jcrlabs-server-0 \
+            k3s etcd-snapshot save \
+            --name jcrlabs-gh-${{ github.run_id }}
+
+          # Copiar al directorio de backup
+          docker cp \
+            k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/ \
+            $BACKUP_DIR/etcd-snapshots/
+          echo "OK: etcd snapshot creado"
+        continue-on-error: true
+
+      # --- Estado general del cluster ---
+      - name: Backup estado general del cluster
+        run: |
+          kubectl get nodes -o wide > $BACKUP_DIR/nodes.txt
+          kubectl get namespaces > $BACKUP_DIR/namespaces.txt
+          kubectl get all -A > $BACKUP_DIR/all-resources.txt
+          kubectl get pvc -A -o yaml > $BACKUP_DIR/all-pvcs.yaml
+          echo "Backup creado: $(date)" > $BACKUP_DIR/backup-metadata.txt
+          echo "Commit: ${{ github.sha }}" >> $BACKUP_DIR/backup-metadata.txt
+          echo "Trigger: ${{ github.event_name }}" >> $BACKUP_DIR/backup-metadata.txt
+
+      # --- Comprimir y subir como artifact ---
+      - name: Comprimir backup
+        run: |
+          cd /tmp
+          tar czf jcrlabs-backup-${{ github.run_id }}.tar.gz \
+            jcrlabs-backup-${{ github.run_id }}/
+          echo "Backup size: $(du -sh /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz)"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cluster-backup-${{ github.run_id }}
+          path: /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Limpiar directorio temporal
+        if: always()
+        run: rm -rf $BACKUP_DIR /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
+
+  # ---------------------------------------------------------------
+  # JOB 3: Health check POST-backup (confirma que el backup no
+  # rompid nada por hacer kubectl/docker commands)
+  # ---------------------------------------------------------------
+  healthcheck-after:
+    name: "Health check post-backup"
+    runs-on: ubuntu-latest
+    needs: backup
+    steps:
+      - name: Confirmar tallerjcr.jcrlabs.net sigue activo
+        run: |
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            --retry 3 \
+            --retry-delay 5 \
+            https://tallerjcr.jcrlabs.net)
+
+          echo "HTTP code post-backup: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net NO responde tras el backup (HTTP $HTTP_CODE)"
+            echo "::error::REVISA EL CLUSTER ANTES DE CONTINUAR"
+            exit 1
+          fi
+          echo "OK: tallerjcr.jcrlabs.net sigue activo (HTTP $HTTP_CODE)"
