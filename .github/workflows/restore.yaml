@@ -1,8 +1,5 @@
 name: "Shield: Restore from Backup"
 
-# Solo se puede disparar manualmente.
-# Proporciona el run_id del backup a restaurar.
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +10,7 @@ on:
         description: 'Escribe RESTORE para confirmar'
         required: true
       namespace_only:
-        description: 'Solo restaurar namespace inventory (true/false)'
+        description: 'Solo restaurar taller-inventario (true) o etcd completo (false)'
         required: false
         default: 'true'
 
@@ -52,25 +49,23 @@ jobs:
         run: |
           cat /tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}/backup-metadata.txt
 
-      - name: Health check ANTES de restaurar
-        run: |
-          echo "Estado actual del namespace inventory:"
-          kubectl get all -n inventory || echo "namespace inventory no responde"
+      - name: Estado actual de taller-inventario
+        run: kubectl get all -n taller-inventario || echo "namespace no responde"
 
-      # --- Restaurar namespace inventory ---
-      - name: Restaurar recursos del namespace inventory
+      # --- Restaurar namespace taller-inventario ---
+      - name: Restaurar recursos del namespace taller-inventario
         if: github.event.inputs.namespace_only == 'true'
         run: |
           BACKUP_PATH="/tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}"
 
-          echo ">> Aplicando backup de inventory..."
-          kubectl apply -f $BACKUP_PATH/inventory-resources.yaml
+          echo ">> Aplicando backup de taller-inventario..."
+          kubectl apply -f $BACKUP_PATH/taller-inventario-resources.yaml
 
-          echo ">> Verificando pods..."
-          kubectl rollout status deployment -n inventory --timeout=120s
-          echo "OK: namespace inventory restaurado"
+          echo ">> Esperando pods..."
+          kubectl rollout status deployment -n taller-inventario --timeout=120s
+          echo "OK: taller-inventario restaurado"
 
-      # --- Restaurar etcd (solo si namespace_only=false) ---
+      # --- Restaurar etcd completo (solo si namespace_only=false) ---
       - name: Restaurar etcd snapshot (cluster completo)
         if: github.event.inputs.namespace_only == 'false'
         run: |
@@ -78,7 +73,6 @@ jobs:
 
           echo "::warning::Restaurando etcd. El cluster se reiniciara."
 
-          # Copiar snapshot al container
           SNAPSHOT=$(ls $BACKUP_PATH/etcd-snapshots/*.db 2>/dev/null | head -1)
           if [ -z "$SNAPSHOT" ]; then
             echo "::error::No se encontro snapshot de etcd en el backup"
@@ -86,34 +80,29 @@ jobs:
           fi
 
           docker cp "$SNAPSHOT" k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/
-
           SNAP_NAME=$(basename $SNAPSHOT .db)
-          docker exec k3d-jcrlabs-server-0 \
-            k3s etcd-snapshot restore --name $SNAP_NAME
+          docker exec k3d-jcrlabs-server-0 k3s etcd-snapshot restore --name $SNAP_NAME
 
-          echo "OK: etcd restaurado. Esperando que el cluster vuelva..."
+          echo "Esperando que el cluster vuelva..."
           sleep 30
           kubectl wait --for=condition=Ready nodes --all --timeout=180s
 
       - name: Health check POST-restauracion
         run: |
-          echo "Estado del namespace inventory tras la restauracion:"
-          kubectl get all -n inventory
+          echo "Estado de taller-inventario tras la restauracion:"
+          kubectl get all -n taller-inventario
 
           HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
-            --max-time 15 \
-            --retry 5 \
-            --retry-delay 10 \
+            --max-time 15 --retry 5 --retry-delay 10 \
             https://tallerjcr.jcrlabs.net)
 
           echo "HTTP code: $HTTP_CODE"
-
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
             echo "::error::tallerjcr.jcrlabs.net NO responde tras la restauracion (HTTP $HTTP_CODE)"
             exit 1
           fi
           echo "OK: tallerjcr.jcrlabs.net activo tras restauracion (HTTP $HTTP_CODE)"
 
-      - name: Limpiar directorio temporal
+      - name: Limpiar temporales
         if: always()
         run: rm -rf /tmp/restore/
