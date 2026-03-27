@@ -5,3 +5,7 @@ resources:
   - applicationsets/portfolio-apps-prod.yaml
   - applicationsets/portfolio-apps-test.yaml
   - applicationsets/infra-apps.yaml
+  - applications/portfolio-gateway-prod.yaml
+  - applications/portfolio-gateway-test.yaml
+  - applications/portfolio-landing-prod.yaml
+  - applications/portfolio-landing-test.yaml
