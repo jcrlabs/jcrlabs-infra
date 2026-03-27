@@ -1,6 +1,0 @@
----
-- name: Ensure kubelet is enabled
-  systemd:
-    name: kubelet
-    enabled: true
-    daemon_reload: true
