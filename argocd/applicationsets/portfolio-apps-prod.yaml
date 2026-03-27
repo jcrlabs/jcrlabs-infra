@@ -12,8 +12,8 @@ spec:
         revision: HEAD
         directories:
           - path: "k8s/apps/*/"
-          # inventory se gestiona manualmente hasta que se migre a GitOps
-          - path: "k8s/apps/inventory/"
+          # taller-inventario se gestiona manualmente (tallerjcr.jcrlabs.net)
+          - path: "k8s/apps/taller-inventario/"
             exclude: true
   template:
     metadata:
