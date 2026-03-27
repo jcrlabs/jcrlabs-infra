@@ -55,9 +55,12 @@ jobs:
             --set server.ingress.enabled=true \
             --set server.ingress.ingressClassName=nginx \
             --set 'server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-cloudflare' \
+            --set 'server.ingress.annotations.nginx\.ingress\.kubernetes\.io/ssl-redirect=false' \
+            --set 'server.ingress.annotations.nginx\.ingress\.kubernetes\.io/force-ssl-redirect=false' \
             --set 'server.ingress.hosts[0]=argocd.jcrlabs.net' \
             --set 'server.ingress.tls[0].secretName=argocd-tls' \
             --set 'server.ingress.tls[0].hosts[0]=argocd.jcrlabs.net' \
+            --set server.ingressGrpc.enabled=false \
             --atomic --timeout 5m
 
       - name: Esperar ArgoCD
