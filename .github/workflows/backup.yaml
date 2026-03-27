@@ -1,0 +1,119 @@
+name: "Shield: Pre-deploy Backup"
+
+on:
+  push:
+    branches: [main]
+    paths: ['k8s/**', 'argocd/**', 'monitoring/**']
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Motivo del backup manual'
+        required: false
+        default: 'manual'
+
+jobs:
+  healthcheck-before:
+    name: "Health check tallerjcr.jcrlabs.net"
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 --retry 3 --retry-delay 5 \
+            https://tallerjcr.jcrlabs.net)
+          echo "HTTP: $HTTP_CODE"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net devuelve HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+  backup:
+    name: "Backup cluster state"
+    runs-on: [self-hosted, homelab]
+    needs: healthcheck-before
+    env:
+      BACKUP_DIR: /tmp/jcrlabs-backup-${{ github.run_id }}
+    steps:
+      - name: Crear directorio de backup
+        run: mkdir -p $BACKUP_DIR
+
+      - name: Backup namespace taller-inventario
+        run: |
+          kubectl get all,ingress,configmap,pvc \
+            -n taller-inventario -o yaml \
+            > $BACKUP_DIR/taller-inventario-resources.yaml
+          kubectl get secrets -n taller-inventario -o yaml \
+            > $BACKUP_DIR/taller-inventario-secrets.yaml
+
+      - name: Backup Sealed Secrets key
+        run: |
+          KEY=$(kubectl get secret -n sealed-secrets \
+            -l sealedsecrets.bitnami.com/sealed-secrets-key \
+            -o yaml 2>/dev/null || echo "")
+          if [ -n "$KEY" ]; then
+            echo "$KEY" > $BACKUP_DIR/sealed-secrets-key.yaml
+          else
+            echo "Sealed Secrets no instalado aun, saltando"
+          fi
+        continue-on-error: true
+
+      - name: Backup wildcard TLS + ClusterIssuers
+        run: |
+          kubectl get secret wildcard-jcrlabs-tls -n cert-manager -o yaml \
+            > $BACKUP_DIR/wildcard-tls.yaml
+          kubectl get clusterissuers -o yaml > $BACKUP_DIR/clusterissuers.yaml
+        continue-on-error: true
+
+      - name: Backup Helm releases
+        run: helm list -A -o yaml > $BACKUP_DIR/helm-releases.yaml
+        continue-on-error: true
+
+      - name: etcd snapshot via k3s
+        run: |
+          docker exec k3d-jcrlabs-server-0 \
+            k3s etcd-snapshot save \
+            --name jcrlabs-gh-${{ github.run_id }}
+          mkdir -p $BACKUP_DIR/etcd
+          docker cp \
+            k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/ \
+            $BACKUP_DIR/etcd/
+        continue-on-error: true
+
+      - name: Backup estado general
+        run: |
+          kubectl get all -A         > $BACKUP_DIR/all-resources.txt
+          kubectl get pvc -A -o yaml > $BACKUP_DIR/all-pvcs.yaml
+          kubectl get namespaces     > $BACKUP_DIR/namespaces.txt
+          echo "Backup: $(date)"           > $BACKUP_DIR/metadata.txt
+          echo "Commit: ${{ github.sha }}" >> $BACKUP_DIR/metadata.txt
+
+      - name: Comprimir
+        run: |
+          cd /tmp
+          tar czf jcrlabs-backup-${{ github.run_id }}.tar.gz \
+            jcrlabs-backup-${{ github.run_id }}/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cluster-backup-${{ github.run_id }}
+          path: /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Limpiar
+        if: always()
+        run: rm -rf $BACKUP_DIR /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
+
+  healthcheck-after:
+    name: "Health check post-backup"
+    runs-on: ubuntu-latest
+    needs: backup
+    steps:
+      - run: |
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 --retry 3 --retry-delay 5 \
+            https://tallerjcr.jcrlabs.net)
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net NO responde tras el backup"
+            exit 1
+          fi
+          echo "OK: tallerjcr.jcrlabs.net activo (HTTP $HTTP_CODE)"

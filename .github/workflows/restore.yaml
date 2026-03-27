@@ -1,0 +1,77 @@
+name: "Shield: Restore from Backup"
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'run_id del backup a restaurar'
+        required: true
+      confirm:
+        description: 'Escribe RESTORE para confirmar'
+        required: true
+      full_etcd:
+        description: 'Restaurar etcd completo (true) o solo taller-inventario (false)'
+        required: false
+        default: 'false'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
+            echo "::error::Escribe RESTORE para confirmar"
+            exit 1
+          fi
+
+  restore:
+    runs-on: [self-hosted, homelab]
+    needs: validate
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cluster-backup-${{ github.event.inputs.backup_run_id }}
+          path: /tmp/restore/
+
+      - name: Descomprimir
+        run: |
+          cd /tmp/restore
+          tar xzf jcrlabs-backup-${{ github.event.inputs.backup_run_id }}.tar.gz
+          cat /tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}/metadata.txt
+
+      - name: Restaurar namespace taller-inventario
+        if: github.event.inputs.full_etcd == 'false'
+        run: |
+          BACKUP=/tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}
+          kubectl apply -f $BACKUP/taller-inventario-resources.yaml
+          kubectl rollout status deployment -n taller-inventario --timeout=120s
+
+      - name: Restaurar etcd completo
+        if: github.event.inputs.full_etcd == 'true'
+        run: |
+          BACKUP=/tmp/restore/jcrlabs-backup-${{ github.event.inputs.backup_run_id }}
+          SNAPSHOT=$(ls $BACKUP/etcd/snapshots/*.db 2>/dev/null | head -1)
+          if [ -z "$SNAPSHOT" ]; then
+            echo "::error::No hay snapshot de etcd en este backup"
+            exit 1
+          fi
+          docker cp "$SNAPSHOT" k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/
+          docker exec k3d-jcrlabs-server-0 \
+            k3s etcd-snapshot restore --name $(basename $SNAPSHOT .db)
+          sleep 30
+          kubectl wait --for=condition=Ready nodes --all --timeout=180s
+
+      - name: Health check final
+        run: |
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            --max-time 15 --retry 5 --retry-delay 10 \
+            https://tallerjcr.jcrlabs.net)
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
+            echo "::error::tallerjcr.jcrlabs.net NO responde tras la restauracion"
+            exit 1
+          fi
+          echo "OK: restauracion completada (HTTP $HTTP_CODE)"
+
+      - name: Limpiar
+        if: always()
+        run: rm -rf /tmp/restore/

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fincontrol
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    env: production
+    project: fincontrol

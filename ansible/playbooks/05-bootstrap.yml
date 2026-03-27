@@ -1,0 +1,63 @@
+---
+# Bootstrap: Sealed Secrets + ArgoCD
+# cert-manager ya está instalado con letsencrypt-cloudflare
+- name: Bootstrap cluster addons
+  hosts: k3d_host
+  become: false
+  vars:
+    kubeconfig: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config') }}"
+  tasks:
+    # Sealed Secrets
+    - name: Add Sealed Secrets helm repo
+      command: helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+      changed_when: false
+
+    - name: Install Sealed Secrets
+      command: >
+        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets
+        --namespace sealed-secrets
+        --create-namespace
+        --version {{ sealed_secrets_version }}
+        --set fullnameOverride=sealed-secrets-controller
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    # ArgoCD
+    - name: Create argocd namespace
+      command: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Add ArgoCD helm repo
+      command: helm repo add argo https://argoproj.github.io/argo-helm
+      changed_when: false
+
+    - name: Install ArgoCD
+      command: >
+        helm upgrade --install argocd argo/argo-cd
+        --namespace argocd
+        --version {{ argocd_version }}
+        --set server.ingress.enabled=true
+        --set server.ingress.ingressClassName=nginx
+        --set 'server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-cloudflare'
+        --set 'server.ingress.hosts[0]=argocd.jcrlabs.net'
+        --set 'server.ingress.tls[0].secretName=argocd-tls'
+        --set 'server.ingress.tls[0].hosts[0]=argocd.jcrlabs.net'
+        --set configs.params.server\.insecure=true
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Wait for ArgoCD to be ready
+      command: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Apply ArgoCD AppProject and ApplicationSets
+      command: kubectl apply -k argocd/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      args:
+        chdir: "{{ playbook_dir }}/../../"
+      changed_when: true
