@@ -1,0 +1,88 @@
+---
+# Instala ArgoCD + Sealed Secrets sobre el cluster k3d ya existente.
+# NO toca el cluster, NO recrea nada.
+#
+# Uso:
+#   ansible-playbook -i inventory/homelab.yml playbooks/bootstrap.yml
+
+- name: Bootstrap ArgoCD + Sealed Secrets en cluster existente
+  hosts: k3d_host
+  become: false
+  vars:
+    kubeconfig: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config') }}"
+  tasks:
+
+    # ---- Sealed Secrets ----
+    - name: Add Sealed Secrets helm repo
+      command: helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+      changed_when: false
+
+    - name: helm repo update
+      command: helm repo update
+      changed_when: false
+
+    - name: Install Sealed Secrets
+      command: >
+        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets
+        --namespace sealed-secrets
+        --create-namespace
+        --version {{ sealed_secrets_version }}
+        --set fullnameOverride=sealed-secrets-controller
+        --atomic
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    # ---- ArgoCD ----
+    - name: Add ArgoCD helm repo
+      command: helm repo add argo https://argoproj.github.io/argo-helm
+      changed_when: false
+
+    - name: Install ArgoCD
+      command: >
+        helm upgrade --install argocd argo/argo-cd
+        --namespace argocd
+        --create-namespace
+        --version {{ argocd_version }}
+        --set configs.params.server\.insecure=true
+        --set server.ingress.enabled=true
+        --set server.ingress.ingressClassName=nginx
+        --set 'server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-cloudflare'
+        --set 'server.ingress.hosts[0]=argocd.jcrlabs.net'
+        --set 'server.ingress.tls[0].secretName=argocd-tls'
+        --set 'server.ingress.tls[0].hosts[0]=argocd.jcrlabs.net'
+        --atomic
+        --timeout 5m
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Esperar a que ArgoCD esté listo
+      command: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    # ---- AppProject + ApplicationSets ----
+    - name: Aplicar AppProject y ApplicationSets
+      command: kubectl apply -k argocd/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      args:
+        chdir: "{{ playbook_dir }}/../../"
+      changed_when: true
+
+    - name: Obtener password inicial de ArgoCD
+      command: >
+        kubectl -n argocd get secret argocd-initial-admin-secret
+        -o jsonpath="{.data.password}"
+      register: argocd_password
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Mostrar acceso a ArgoCD
+      debug:
+        msg:
+          - "ArgoCD instalado correctamente"
+          - "URL: https://argocd.jcrlabs.net"
+          - "User: admin"
+          - "Pass: {{ argocd_password.stdout | b64decode }}"
