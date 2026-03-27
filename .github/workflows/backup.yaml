@@ -16,8 +16,7 @@ jobs:
     name: "Health check tallerjcr.jcrlabs.net"
     runs-on: ubuntu-latest
     steps:
-      - name: Check HTTP status
-        run: |
+      - run: |
           HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
             --max-time 15 --retry 3 --retry-delay 5 \
             https://tallerjcr.jcrlabs.net)
@@ -34,12 +33,6 @@ jobs:
     env:
       BACKUP_DIR: /tmp/jcrlabs-backup-${{ github.run_id }}
     steps:
-      - name: Setup kubectl
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-
       - name: Crear directorio de backup
         run: mkdir -p $BACKUP_DIR
 
@@ -59,7 +52,7 @@ jobs:
           if [ -n "$KEY" ]; then
             echo "$KEY" > $BACKUP_DIR/sealed-secrets-key.yaml
           else
-            echo "Sealed Secrets no instalado aun"
+            echo "Sealed Secrets no instalado aun, saltando"
           fi
         continue-on-error: true
 
@@ -67,24 +60,33 @@ jobs:
         run: |
           kubectl get secret wildcard-jcrlabs-tls -n cert-manager -o yaml \
             > $BACKUP_DIR/wildcard-tls.yaml
-          kubectl get clusterissuers -o yaml \
-            > $BACKUP_DIR/clusterissuers.yaml
+          kubectl get clusterissuers -o yaml > $BACKUP_DIR/clusterissuers.yaml
         continue-on-error: true
 
       - name: Backup Helm releases
+        run: helm list -A -o yaml > $BACKUP_DIR/helm-releases.yaml
+        continue-on-error: true
+
+      - name: etcd snapshot via k3s
         run: |
-          helm list -A -o yaml > $BACKUP_DIR/helm-releases.yaml
+          docker exec k3d-jcrlabs-server-0 \
+            k3s etcd-snapshot save \
+            --name jcrlabs-gh-${{ github.run_id }}
+          mkdir -p $BACKUP_DIR/etcd
+          docker cp \
+            k3d-jcrlabs-server-0:/var/lib/rancher/k3s/server/db/snapshots/ \
+            $BACKUP_DIR/etcd/
         continue-on-error: true
 
       - name: Backup estado general
         run: |
-          kubectl get all -A          > $BACKUP_DIR/all-resources.txt
-          kubectl get pvc -A -o yaml  > $BACKUP_DIR/all-pvcs.yaml
-          kubectl get namespaces      > $BACKUP_DIR/namespaces.txt
-          echo "Backup: $(date)"              > $BACKUP_DIR/metadata.txt
-          echo "Commit: ${{ github.sha }}"    >> $BACKUP_DIR/metadata.txt
+          kubectl get all -A         > $BACKUP_DIR/all-resources.txt
+          kubectl get pvc -A -o yaml > $BACKUP_DIR/all-pvcs.yaml
+          kubectl get namespaces     > $BACKUP_DIR/namespaces.txt
+          echo "Backup: $(date)"           > $BACKUP_DIR/metadata.txt
+          echo "Commit: ${{ github.sha }}" >> $BACKUP_DIR/metadata.txt
 
-      - name: Comprimir y subir artifact
+      - name: Comprimir
         run: |
           cd /tmp
           tar czf jcrlabs-backup-${{ github.run_id }}.tar.gz \
@@ -99,9 +101,7 @@ jobs:
 
       - name: Limpiar
         if: always()
-        run: |
-          rm -rf $BACKUP_DIR /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
-          rm -f ~/.kube/config
+        run: rm -rf $BACKUP_DIR /tmp/jcrlabs-backup-${{ github.run_id }}.tar.gz
 
   healthcheck-after:
     name: "Health check post-backup"
@@ -112,8 +112,8 @@ jobs:
           HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
             --max-time 15 --retry 3 --retry-delay 5 \
             https://tallerjcr.jcrlabs.net)
-          echo "HTTP post-backup: $HTTP_CODE"
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 500 ]; then
             echo "::error::tallerjcr.jcrlabs.net NO responde tras el backup"
             exit 1
           fi
+          echo "OK: tallerjcr.jcrlabs.net activo (HTTP $HTTP_CODE)"
