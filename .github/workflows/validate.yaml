@@ -13,7 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install yamllint
-      # Solo linta manifests K8s y ArgoCD (no Helm values)
       - run: yamllint -d relaxed k8s/ argocd/
 
   check-secrets:
@@ -22,9 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          if grep -rl --include='*.yaml' 'kind: Secret' k8s/ \
-               | xargs grep -L 'SealedSecret' 2>/dev/null | grep .; then
-            echo "ERROR: plaintext Secret encontrado. Usa Sealed Secrets."
-            exit 1
+          FOUND=$(grep -rl --include='*.yaml' 'kind: Secret' k8s/ 2>/dev/null || true)
+          if [ -z "$FOUND" ]; then
+            echo "OK: no secrets encontrados."
+            exit 0
           fi
-          echo "OK: no plaintext secrets."
+          for f in $FOUND; do
+            if ! grep -q 'SealedSecret' "$f"; then
+              echo "ERROR: $f contiene un Secret en texto plano. Usa Sealed Secrets."
+              exit 1
+            fi
+          done
+          echo "OK: solo SealedSecrets encontrados."
