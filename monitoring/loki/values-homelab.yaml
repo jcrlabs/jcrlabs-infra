@@ -1,7 +1,5 @@
-# Loki Helm values for homelab (single-binary mode)
-# helm repo add grafana https://grafana.github.io/helm-charts
-# helm upgrade --install loki grafana/loki \
-#   -n monitoring --create-namespace -f values-homelab.yaml
+# Loki values para jcrlabs homelab (single-binary)
+# Storage: local-path | Estimado: ~1-2GB/semana de logs con pocos servicios
 
 loki:
   auth_enabled: false
@@ -23,7 +21,8 @@ singleBinary:
   replicas: 1
   persistence:
     enabled: true
-    size: 20Gi
+    storageClass: local-path
+    size: 5Gi
 
 read:
   replicas: 0
