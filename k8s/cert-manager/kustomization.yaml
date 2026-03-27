@@ -1,6 +1,19 @@
+# cert-manager está instalado y gestionado fuera de este repo.
+#
+# Estado actual del cluster (no re-aplicar):
+#   ClusterIssuer : letsencrypt-cloudflare   (DNS-01 via Cloudflare)
+#   Certificate   : wildcard-jcrlabs         (namespace: cert-manager)
+#   Secret TLS    : wildcard-jcrlabs-tls     (namespace: cert-manager)
+#
+# Para nuevos proyectos: referenciar letsencrypt-cloudflare como issuer
+# y dejar que cert-manager cree el secret TLS en el namespace del proyecto.
+#
+# Ejemplo en Ingress:
+#   annotations:
+#     cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+#   tls:
+#     - secretName: {project}-tls
+#       hosts: [{project}.jcrlabs.net]
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources:
-  - cluster-issuer.yaml
-  - wildcard-cert.yaml
-  - wildcard-cert-test.yaml
+resources: []

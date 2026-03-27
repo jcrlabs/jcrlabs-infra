@@ -1,12 +1,8 @@
 # Checklist — Añadir Nuevo Proyecto
 
-Sigue estos pasos para integrar un nuevo proyecto en el cluster.
-
 ## 1. Namespaces
 
-Crea los dos manifests en `k8s/namespaces/`:
-
-```bash
+```yaml
 # k8s/namespaces/{name}.yaml
 apiVersion: v1
 kind: Namespace
@@ -16,7 +12,6 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     env: production
     project: {name}
-
 ---
 # k8s/namespaces/{name}-test.yaml
 apiVersion: v1
@@ -29,20 +24,18 @@ metadata:
     project: {name}
 ```
 
-## 2. Manifests K8s (producción)
-
-Crea el directorio `k8s/apps/{name}/` con la estructura mínima:
+## 2. Manifests K8s — `k8s/apps/{name}/`
 
 ```
 k8s/apps/{name}/
 ├── deployment.yaml
 ├── service.yaml
-├── ingress.yaml          # host: {name}.jcrlabs.net
-├── hpa.yaml              # min: 1, max: 4
-└── servicemonitor.yaml   # para Prometheus
+├── ingress.yaml
+├── hpa.yaml
+└── servicemonitor.yaml
 ```
 
-### ingress.yaml mínimo
+### ingress.yaml
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -50,7 +43,7 @@ metadata:
   name: {name}
   namespace: {name}
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
 spec:
   ingressClassName: nginx
   rules:
@@ -70,7 +63,7 @@ spec:
       secretName: {name}-tls
 ```
 
-### servicemonitor.yaml mínimo
+### servicemonitor.yaml
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -89,17 +82,16 @@ spec:
       interval: 30s
 ```
 
-## 3. Manifests K8s (test)
+## 3. Manifests de test — `k8s/apps-test/{name}/`
 
-Crea `k8s/apps-test/{name}/` con los mismos manifests pero:
+Copia de `k8s/apps/{name}/` con:
 - `namespace: {name}-test`
 - `host: {name}-test.jcrlabs.net`
-- `cert-manager.io/cluster-issuer: letsencrypt-staging`
+- `secretName: {name}-test-tls`
 
-## 4. Añadir a AppProject ArgoCD
+## 4. AppProject ArgoCD
 
-Edita `argocd/projects/portfolio.yaml` y añade los namespaces:
-
+Edita `argocd/projects/portfolio.yaml` y añade:
 ```yaml
     - namespace: {name}
       server: https://kubernetes.default.svc
@@ -109,26 +101,18 @@ Edita `argocd/projects/portfolio.yaml` y añade los namespaces:
 
 ## 5. ArgoCD auto-detecta
 
-Una vez hecho el commit+push, ArgoCD detecta el nuevo directorio automáticamente vía ApplicationSet y sincroniza.
-
+Tras el commit+push, el ApplicationSet lo descubre automáticamente.
 ```bash
-# Verificar que aparece
 argocd app list | grep {name}
 ```
 
 ## 6. Dashboard Grafana
 
-Crea `monitoring/dashboards/{name}.json` con:
-- HTTP request rate por endpoint
-- Latencia p99
-- CPU y memoria del pod
-- Errores 4xx/5xx
+Crea `monitoring/dashboards/{name}.json`.
 
 ## 7. Actualizar docs
 
-Actualiza `docs/architecture.md`:
-- Añadir fila en la tabla de dominios
-- Actualizar diagrama si es necesario
+`docs/architecture.md` — añadir fila en la tabla de dominios.
 
 ## Checklist rápida
 
@@ -136,10 +120,10 @@ Actualiza `docs/architecture.md`:
 - [ ] `k8s/namespaces/{name}-test.yaml`
 - [ ] `k8s/apps/{name}/deployment.yaml`
 - [ ] `k8s/apps/{name}/service.yaml`
-- [ ] `k8s/apps/{name}/ingress.yaml`
+- [ ] `k8s/apps/{name}/ingress.yaml`  ← issuer: `letsencrypt-cloudflare`
 - [ ] `k8s/apps/{name}/hpa.yaml`
 - [ ] `k8s/apps/{name}/servicemonitor.yaml`
-- [ ] `k8s/apps-test/{name}/` (copia adaptada para test)
+- [ ] `k8s/apps-test/{name}/` (adaptado para test)
 - [ ] `argocd/projects/portfolio.yaml` actualizado
 - [ ] `monitoring/dashboards/{name}.json`
 - [ ] `docs/architecture.md` actualizado

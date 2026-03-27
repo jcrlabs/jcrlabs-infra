@@ -1,4 +1,5 @@
 ---
+# Host donde corre Docker + k3d
 all:
   vars:
     ansible_user: ubuntu
@@ -6,19 +7,7 @@ all:
     ansible_python_interpreter: /usr/bin/python3
 
   children:
-    control_plane:
+    k3d_host:
       hosts:
-        k8s-master:
-          ansible_host: 192.168.1.10
-
-    workers:
-      hosts:
-        k8s-worker-01:
-          ansible_host: 192.168.1.11
-        k8s-worker-02:
-          ansible_host: 192.168.1.12
-
-    k8s_cluster:
-      children:
-        control_plane:
-        workers:
+        homelab:
+          ansible_host: 192.168.1.10   # IP real del host

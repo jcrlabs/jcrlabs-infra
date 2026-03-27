@@ -1,52 +1,26 @@
 ---
-- name: Bootstrap cluster addons (MetalLB, cert-manager, ArgoCD, Sealed Secrets)
-  hosts: control_plane
+# Bootstrap: Sealed Secrets + ArgoCD
+# cert-manager ya está instalado con letsencrypt-cloudflare
+- name: Bootstrap cluster addons
+  hosts: k3d_host
   become: false
   vars:
-    kubeconfig: "/home/{{ ansible_user }}/.kube/config"
+    kubeconfig: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config') }}"
   tasks:
-    # MetalLB
-    - name: Install MetalLB
-      command: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/{{ metallb_version }}/config/manifests/metallb-native.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-      changed_when: true
-
-    - name: Apply MetalLB config from repo
-      command: kubectl apply -k k8s/metallb/
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-      args:
-        chdir: "{{ playbook_dir }}/../"
-      changed_when: true
-
-    # cert-manager
-    - name: Install cert-manager CRDs
-      command: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-      changed_when: true
-
-    - name: Wait for cert-manager to be ready
-      command: kubectl rollout status deployment/cert-manager -n cert-manager --timeout=120s
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
+    # Sealed Secrets
+    - name: Add Sealed Secrets helm repo
+      command: helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
       changed_when: false
 
-    - name: Apply cert-manager config
-      command: kubectl apply -k k8s/cert-manager/
+    - name: Install Sealed Secrets
+      command: >
+        helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets
+        --namespace sealed-secrets
+        --create-namespace
+        --version {{ sealed_secrets_version }}
+        --set fullnameOverride=sealed-secrets-controller
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
-      args:
-        chdir: "{{ playbook_dir }}/../"
-      changed_when: true
-
-    # Sealed Secrets
-    - name: Install Sealed Secrets controller
-      command: kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/{{ sealed_secrets_version }}/controller.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-      changed_when: true
 
     # ArgoCD
     - name: Create argocd namespace
@@ -55,11 +29,24 @@
         KUBECONFIG: "{{ kubeconfig }}"
       changed_when: true
 
+    - name: Add ArgoCD helm repo
+      command: helm repo add argo https://argoproj.github.io/argo-helm
+      changed_when: false
+
     - name: Install ArgoCD
-      command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml
+      command: >
+        helm upgrade --install argocd argo/argo-cd
+        --namespace argocd
+        --version {{ argocd_version }}
+        --set server.ingress.enabled=true
+        --set server.ingress.ingressClassName=nginx
+        --set 'server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-cloudflare'
+        --set 'server.ingress.hosts[0]=argocd.jcrlabs.net'
+        --set 'server.ingress.tls[0].secretName=argocd-tls'
+        --set 'server.ingress.tls[0].hosts[0]=argocd.jcrlabs.net'
+        --set configs.params.server\.insecure=true
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
-      changed_when: true
 
     - name: Wait for ArgoCD to be ready
       command: kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
@@ -67,10 +54,10 @@
         KUBECONFIG: "{{ kubeconfig }}"
       changed_when: false
 
-    - name: Apply ArgoCD projects and ApplicationSets
+    - name: Apply ArgoCD AppProject and ApplicationSets
       command: kubectl apply -k argocd/
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
       args:
-        chdir: "{{ playbook_dir }}/../"
+        chdir: "{{ playbook_dir }}/../../"
       changed_when: true

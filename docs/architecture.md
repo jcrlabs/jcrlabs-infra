@@ -1,98 +1,96 @@
 # Architecture — jcrlabs Infrastructure
 
-## Overview
+## Stack real
 
-Homelab Kubernetes cluster gestionado como IaC. Todo el estado vive en Git; cero `kubectl apply` manual post-bootstrap.
+| Capa | Tecnología |
+|------|------------|
+| Cluster | k3d (k3s en Docker) v1.31.5 |
+| Nodos | 3 control-plane + 3 workers |
+| Ingress | ingress-nginx (LoadBalancer via k3d) |
+| TLS externo | Cloudflare (edge termination) |
+| TLS interno | cert-manager + letsencrypt-cloudflare |
+| Wildcard cert | `wildcard-jcrlabs-tls` (cert-manager ns) |
+| GitOps | ArgoCD + ApplicationSets |
+| Secrets | Sealed Secrets |
+| Observabilidad | kube-prometheus-stack + Loki + Promtail |
+
+## Topología de red
 
 ```
-                        ┌─────────────────────────────────┐
-                        │         GitHub (jcrlabs-infra)  │
-                        │  argocd/ · k8s/ · monitoring/   │
-                        └────────────┬────────────────────┘
-                                     │ GitOps (pull)
-                        ┌────────────▼────────────────────┐
-                        │            ArgoCD               │
-                        │   ApplicationSet auto-discover  │
-                        └──┬──────────────────────────────┘
-                           │ syncs
-          ┌────────────────┼────────────────────┐
-          │                │                    │
-    ┌─────▼──────┐  ┌──────▼──────┐  ┌─────────▼────────┐
-    │  prod ns   │  │  test ns    │  │   infra ns       │
-    │ home       │  │ home-test   │  │ monitoring       │
-    │ inventory  │  │ inv-test    │  │ cert-manager     │
-    │ blog       │  │ blog-test   │  │ metallb-system   │
-    │ dashboard  │  │ dash-test   │  │ sealed-secrets   │
-    │ chat       │  │ chat-test   │  │ argocd           │
-    │ fincontrol │  │ fin-test    │  └──────────────────┘
-    └────────────┘  └─────────────┘
+Internet
+    │
+    ▼
+Cloudflare (DNS + TLS edge termination)
+    │  Cloudflare Tunnel
+    ▼
+Host (Docker)
+    │
+    ▼
+ingress-nginx  ←  LoadBalancer k3d  (172.18.0.2–7:80/443)
+    │
+    ├── home.jcrlabs.net        → ns: home
+    ├── inventory.jcrlabs.net   → ns: inventory
+    ├── blog.jcrlabs.net        → ns: blog
+    ├── dashboard.jcrlabs.net   → ns: dashboard
+    ├── chat.jcrlabs.net        → ns: chat
+    ├── fincontrol.jcrlabs.net  → ns: fincontrol
+    ├── grafana.jcrlabs.net     → ns: monitoring
+    └── argocd.jcrlabs.net      → ns: argocd
 ```
 
-## Nodes
+## Nodos k3d
 
-| Hostname | IP | Role |
-|----------|-----|------|
-| k8s-master | 192.168.1.10 | control-plane |
-| k8s-worker-01 | 192.168.1.11 | worker |
-| k8s-worker-02 | 192.168.1.12 | worker |
-
-## Networking
-
-- **CNI**: Calico (pod CIDR `10.244.0.0/16`)
-- **LoadBalancer**: MetalLB L2 — pool `192.168.1.200-192.168.1.220`
-- **Ingress**: ingress-nginx con IP de MetalLB
-- **TLS**: cert-manager + Let's Encrypt DNS-01 (Cloudflare)
-  - `*.jcrlabs.net` → prod (letsencrypt-prod)
-  - `*-test.jcrlabs.net` → staging (letsencrypt-staging)
+| Nombre | IP Docker | Rol |
+|--------|-----------|-----|
+| k3d-jcrlabs-server-0 | 172.18.0.2 | control-plane, etcd, master |
+| k3d-jcrlabs-server-1 | 172.18.0.3 | control-plane, etcd, master |
+| k3d-jcrlabs-server-2 | 172.18.0.4 | control-plane, etcd, master |
+| k3d-jcrlabs-agent-0  | 172.18.0.5 | worker |
+| k3d-jcrlabs-agent-1  | 172.18.0.6 | worker |
+| k3d-jcrlabs-agent-2  | 172.18.0.7 | worker |
 
 ## GitOps Flow
 
-1. Developer pushes manifests a `k8s/apps/{project}/`
-2. ArgoCD ApplicationSet `portfolio-apps-prod` lo detecta vía git generator
-3. ArgoCD sincroniza automáticamente (prune + selfHeal)
-4. Para test: push a `k8s/apps-test/{project}/` → namespace `{project}-test`
-
-## Secrets Management
-
-Todos los secrets son **Sealed Secrets**. Flujo:
-
-```bash
-# 1. Crear secret en claro
-kubectl create secret generic my-secret \
-  --from-literal=key=value \
-  --dry-run=client -o yaml > /tmp/secret.yaml
-
-# 2. Cifrar con kubeseal
-kubeseal --controller-namespace sealed-secrets \
-  --format yaml < /tmp/secret.yaml > k8s/sealed-secrets/my-sealed-secret.yaml
-
-# 3. Commit + push → ArgoCD lo aplica
+```
+git push → main (jcrlabs-infra)
+     │
+     │  ArgoCD poll / webhook
+     ▼
+ApplicationSet portfolio-apps-prod
+     │  detecta k8s/apps/*/
+     ▼
+K8s namespace = nombre del directorio
+     │  prune + selfHeal automático
+     ▼
+Pods corriendo
 ```
 
-## Observabilidad
+## cert-manager (ya instalado)
 
-| Componente | Namespace | URL |
-|-----------|-----------|-----|
-| Grafana | monitoring | grafana.jcrlabs.net |
-| Prometheus | monitoring | (interno) |
-| Alertmanager | monitoring | (interno) |
-| Loki | monitoring | (interno) |
+- **ClusterIssuer**: `letsencrypt-cloudflare` (DNS-01, Cloudflare API)
+- **Certificate**: `wildcard-jcrlabs` → secret `wildcard-jcrlabs-tls` en ns `cert-manager`
+- Para nuevos proyectos: usar annotation `cert-manager.io/cluster-issuer: letsencrypt-cloudflare`
+  en el Ingress; cert-manager crea el secret en el namespace del proyecto automáticamente.
 
-### Dashboards
+## Secrets (Sealed Secrets)
 
-- **Cluster Overview**: nodos, pods, CPU/RAM por nodo
-- **Per-Service**: HTTP rate, latencia p99, CPU/RAM por pod
-- **Alerts**: alertas activas en tiempo real
+```bash
+# Generar sealed secret
+kubectl create secret generic my-secret \
+  --from-literal=key=value \
+  --dry-run=client -o yaml | \
+  kubeseal --controller-namespace sealed-secrets --format yaml \
+  > k8s/sealed-secrets/my-sealed-secret.yaml
 
-## Stack de versiones
+# Commit + push → ArgoCD lo aplica
+```
 
-| Componente | Versión |
-|-----------|--------|
-| Kubernetes | 1.30 |
-| Calico CNI | v3.28 |
-| MetalLB | v0.14.5 |
-| ArgoCD | v2.11 |
-| cert-manager | v1.14.5 |
-| Sealed Secrets | v0.26.2 |
-| kube-prometheus-stack | latest stable |
-| Loki | latest stable |
+## Namespaces de sistema
+
+| Namespace | Componente |
+|-----------|------------|
+| `cert-manager` | cert-manager (ya instalado) |
+| `ingress-nginx` | ingress-nginx (ya instalado) |
+| `argocd` | ArgoCD |
+| `monitoring` | kube-prometheus-stack + Loki |
+| `sealed-secrets` | Sealed Secrets controller |
