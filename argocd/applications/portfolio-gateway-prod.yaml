@@ -31,3 +31,10 @@ spec:
         duration: 5s
         factor: 2
         maxDuration: 3m
+  # ghcr-pull-secret is owned exclusively by portfolio-landing; ignore it here
+  # to avoid SharedResourceWarning caused by SSA field-manager entries from both apps.
+  ignoreDifferences:
+    - group: bitnami.com
+      kind: SealedSecret
+      name: ghcr-pull-secret
+      namespace: portfolio
