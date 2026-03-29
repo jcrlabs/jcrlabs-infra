@@ -53,11 +53,14 @@ spec:
               command: [mongosh, --eval, "db.adminCommand('ping')"]
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             exec:
               command: [mongosh, --eval, "db.adminCommand('ping')"]
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 10
           volumeMounts:
             - name: data
               mountPath: /data/db
