@@ -15,6 +15,9 @@ spec:
       valueFiles:
         - values.yaml
         - values-test.yaml
+      parameters:
+        - name: secretName
+          value: blog-back-secrets
   destination:
     server: https://kubernetes.default.svc
     namespace: blog-test
