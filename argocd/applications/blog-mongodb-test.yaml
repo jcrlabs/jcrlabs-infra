@@ -9,7 +9,7 @@ spec:
   project: portfolio
   source:
     repoURL: https://github.com/jcrlabs/jcrlabs-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: k8s/blog-test/mongodb
   destination:
     server: https://kubernetes.default.svc
