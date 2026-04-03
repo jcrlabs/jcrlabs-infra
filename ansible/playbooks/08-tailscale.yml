@@ -34,11 +34,7 @@
 
     - name: Conectar a Tailscale (sin DNS automático)
       become: true
-<<<<<<< HEAD
       command: sudo tailscale up --accept-dns=false --accept-routes=false
-=======
-      command: tailscale up --accept-dns=false --accept-routes=false
->>>>>>> 7d5ab5b24974452f5166f10f038170a44c8440ac
       register: ts_result
       changed_when: ts_result.rc == 0
       failed_when: false  # El primer up puede requerir autenticación manual

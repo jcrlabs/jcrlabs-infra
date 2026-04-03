@@ -22,13 +22,9 @@ ingress_namespace: ingress-nginx
 cloudflared_tunnel_id: 11d78249-9a8a-4009-8089-a31ba2ec57a5
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-<<<<<<< HEAD
 infra_repo_path: /home/jonathancri/jcrlabs/jcrlabs-infra
 sealed_secrets_backup: "{{ backup_dir }}/cluster-backup-20260403/sealed-secrets/secret.yaml"
 
 # ─── Repo ─────────────────────────────────────────────────────────────────────
 infra_repo: https://github.com/jcrlabs/jcrlabs-infra.git
-=======
-infra_repo: /home/jonathancri/repo/personal/jcrlabs/jcrlabs-infra
-sealed_secrets_backup: "{{ backup_dir }}/cluster-backup-20260403/sealed-secrets/secret.yaml"
->>>>>>> 7d5ab5b24974452f5166f10f038170a44c8440ac
+
