@@ -15,3 +15,7 @@ resources:
   - applications/blog-front-test.yaml
   - applications/blog-mongodb-prod.yaml
   - applications/blog-mongodb-test.yaml
+  - applications/inventory-back-prod.yaml
+  - applications/inventory-back-test.yaml
+  - applications/inventory-front-prod.yaml
+  - applications/inventory-front-test.yaml

@@ -1,0 +1,50 @@
+---
+- name: Tailscale — instalación y configuración
+  hosts: homelab
+  become: false
+  tags: tailscale
+
+  tasks:
+    - name: Instalar Tailscale
+      become: true
+      shell: curl -fsSL https://tailscale.com/install.sh | sh
+      args:
+        creates: /usr/bin/tailscaled
+
+    - name: Habilitar tailscaled
+      become: true
+      systemd:
+        name: tailscaled
+        state: started
+        enabled: true
+
+    # Evitar que Tailscale sobreescriba /etc/resolv.conf
+    - name: Fijar DNS en /etc/resolv.conf
+      become: true
+      copy:
+        dest: /etc/resolv.conf
+        content: "nameserver 8.8.8.8\n"
+        mode: '0644'
+
+    - name: Proteger /etc/resolv.conf de modificaciones
+      become: true
+      command: chattr +i /etc/resolv.conf
+      failed_when: false  # Si ya está protegido no falla
+      changed_when: true
+
+    - name: Conectar a Tailscale (sin DNS automático)
+      become: true
+      command: tailscale up --accept-dns=false --accept-routes=false
+      register: ts_result
+      changed_when: ts_result.rc == 0
+      failed_when: false  # El primer up puede requerir autenticación manual
+
+    - name: Mostrar IP de Tailscale
+      command: tailscale ip -4
+      register: ts_ip
+      changed_when: false
+      failed_when: false
+
+    - name: Info de Tailscale
+      debug:
+        msg: "Tailscale IP: {{ ts_ip.stdout | default('pendiente de autenticación — ejecuta: sudo tailscale up') }}"

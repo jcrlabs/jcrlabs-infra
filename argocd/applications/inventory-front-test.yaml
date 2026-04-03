@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inventory-front-test
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: portfolio
+  source:
+    repoURL: https://github.com/jcrlabs/inventory-front.git
+    targetRevision: develop
+    path: deploy/helm
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-test.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inventory-test
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

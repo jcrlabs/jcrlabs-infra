@@ -1,0 +1,26 @@
+# ─── General ─────────────────────────────────────────────────────────────────
+domain: jcrlabs.net
+cluster_user: jonathancri
+backup_dir: /media/jonathancri/TOSHIBA_EXT/BACKUP
+
+# ─── K3s ─────────────────────────────────────────────────────────────────────
+k3s_version: v1.31.4+k3s1
+
+# ─── Helm chart versions ──────────────────────────────────────────────────────
+nginx_ingress_version: "4.11.3"
+cert_manager_version: "1.16.3"
+sealed_secrets_version: "2.16.2"
+argocd_version: "7.7.16"
+
+# ─── Namespaces ───────────────────────────────────────────────────────────────
+argocd_namespace: argocd
+sealed_secrets_namespace: sealed-secrets
+cert_manager_namespace: cert-manager
+ingress_namespace: ingress-nginx
+
+# ─── Cloudflare tunnel ────────────────────────────────────────────────────────
+cloudflared_tunnel_id: 11d78249-9a8a-4009-8089-a31ba2ec57a5
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+infra_repo: /home/jonathancri/repo/personal/jcrlabs/jcrlabs-infra
+sealed_secrets_backup: "{{ backup_dir }}/cluster-backup-20260403/sealed-secrets/secret.yaml"

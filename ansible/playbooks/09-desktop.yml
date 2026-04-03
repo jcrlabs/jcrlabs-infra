@@ -1,0 +1,57 @@
+---
+- name: Desktop — X11 login automático + RustDesk
+  hosts: homelab
+  become: false
+  tags: desktop
+
+  vars:
+    rustdesk_version: "1.4.6"
+
+  tasks:
+    # ── GDM: forzar X11 con login automático ─────────────────────────────────
+    - name: Configurar GDM para X11 y login automático
+      become: true
+      copy:
+        dest: /etc/gdm3/custom.conf
+        mode: '0644'
+        content: |
+          [daemon]
+          WaylandEnable=false
+          AutomaticLoginEnable=true
+          AutomaticLogin={{ cluster_user }}
+
+    # ── RustDesk ─────────────────────────────────────────────────────────────
+    - name: Descargar RustDesk
+      get_url:
+        url: "https://github.com/rustdesk/rustdesk/releases/download/{{ rustdesk_version }}/rustdesk-{{ rustdesk_version }}-x86_64.deb"
+        dest: /tmp/rustdesk.deb
+        mode: '0644'
+
+    - name: Instalar RustDesk
+      become: true
+      apt:
+        deb: /tmp/rustdesk.deb
+        state: present
+
+    - name: Crear directorio de autostart
+      file:
+        path: "/home/{{ cluster_user }}/.config/autostart"
+        state: directory
+        mode: '0755'
+
+    - name: Configurar autostart de RustDesk en sesión gráfica
+      copy:
+        dest: "/home/{{ cluster_user }}/.config/autostart/rustdesk.desktop"
+        mode: '0644'
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=RustDesk
+          Exec=rustdesk
+          Hidden=false
+          NoDisplay=false
+          X-GNOME-Autostart-enabled=true
+
+    - name: Recordatorio — reiniciar para activar X11
+      debug:
+        msg: "Reinicia el sistema para activar X11 y el login automático: sudo reboot"

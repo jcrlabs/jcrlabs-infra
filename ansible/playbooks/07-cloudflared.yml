@@ -1,0 +1,110 @@
+---
+# Restaura las credenciales del tunnel desde el backup.
+# El tunnel "jcrlabs-k3d" ya existe en Cloudflare — no hace falta recrearlo.
+# Solo se corrige la ruta del usuario (jcrlabs → jonathancri) y el puerto
+# de la API de K3s (43325 → 6443).
+- name: Cloudflare Tunnel — restaurar credenciales + servicio systemd
+  hosts: homelab
+  become: false
+  tags: cloudflared
+
+  tasks:
+    # ── Instalar cloudflared ─────────────────────────────────────────────────
+    - name: Descargar cloudflared
+      become: true
+      get_url:
+        url: https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        dest: /tmp/cloudflared.deb
+        mode: '0644'
+
+    - name: Instalar cloudflared
+      become: true
+      apt:
+        deb: /tmp/cloudflared.deb
+        state: present
+
+    # ── Restaurar credenciales desde backup ──────────────────────────────��───
+    - name: Verificar que el backup de cloudflared existe
+      stat:
+        path: "{{ backup_dir }}/.cloudflared"
+      register: cf_backup
+      failed_when: not cf_backup.stat.exists
+
+    - name: Crear directorio ~/.cloudflared
+      file:
+        path: "/home/{{ cluster_user }}/.cloudflared"
+        state: directory
+        mode: '0700'
+
+    - name: Copiar credenciales del tunnel desde backup
+      copy:
+        src: "{{ backup_dir }}/.cloudflared/{{ cloudflared_tunnel_id }}.json"
+        dest: "/home/{{ cluster_user }}/.cloudflared/{{ cloudflared_tunnel_id }}.json"
+        mode: '0600'
+        remote_src: true
+
+    - name: Copiar cert.pem desde backup
+      copy:
+        src: "{{ backup_dir }}/.cloudflared/cert.pem"
+        dest: "/home/{{ cluster_user }}/.cloudflared/cert.pem"
+        mode: '0600'
+        remote_src: true
+
+    # ── config.yml (rutas actualizadas para k3s nativo) ──────────────────────
+    - name: Escribir config.yml del tunnel
+      copy:
+        dest: "/home/{{ cluster_user }}/.cloudflared/config.yml"
+        mode: '0644'
+        content: |
+          tunnel: jcrlabs-k3d
+          credentials-file: /home/{{ cluster_user }}/.cloudflared/{{ cloudflared_tunnel_id }}.json
+
+          ingress:
+            - hostname: api.{{ domain }}
+              service: https://127.0.0.1:6443
+              originRequest:
+                noTLSVerify: true
+                httpHostHeader: api.{{ domain }}
+
+            - hostname: "*.{{ domain }}"
+              service: https://127.0.0.1:443
+              originRequest:
+                noTLSVerify: true
+
+            - service: http_status:404
+
+    # ── Servicio systemd ─────────────────────────────────────────────────────
+    - name: Crear servicio systemd para cloudflared
+      become: true
+      copy:
+        dest: /etc/systemd/system/cloudflared.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Cloudflare Tunnel
+          After=network-online.target k3s.service
+          Wants=network-online.target
+
+          [Service]
+          User={{ cluster_user }}
+          ExecStartPre=/bin/sleep 15
+          ExecStart=/usr/bin/cloudflared --config /home/{{ cluster_user }}/.cloudflared/config.yml tunnel run
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Habilitar e iniciar cloudflared
+      become: true
+      systemd:
+        name: cloudflared
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Verificar estado del tunnel
+      command: systemctl is-active cloudflared
+      register: cf_status
+      changed_when: false
+      failed_when: cf_status.stdout != "active"

@@ -1,0 +1,57 @@
+---
+- name: CLI tools — helm, k9s, kubeseal, argocd
+  hosts: homelab
+  become: false
+  tags: cli-tools
+
+  tasks:
+    # ── Helm ─────────────────────────────────────────────────────────────────
+    - name: Instalar Helm
+      become: true
+      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
+
+    # ── k9s ──────────────────────────────────────────────────────────────────
+    - name: Obtener versión latest de k9s
+      uri:
+        url: https://api.github.com/repos/derailed/k9s/releases/latest
+        return_content: true
+      register: k9s_release
+
+    - name: Instalar k9s
+      become: true
+      shell: |
+        VERSION="{{ (k9s_release.content | from_json).tag_name }}"
+        curl -sL "https://github.com/derailed/k9s/releases/download/${VERSION}/k9s_Linux_amd64.tar.gz" \
+          | tar xz -C /tmp k9s
+        mv /tmp/k9s /usr/local/bin/k9s
+        chmod +x /usr/local/bin/k9s
+      args:
+        creates: /usr/local/bin/k9s
+
+    # ── kubeseal ─────────────────────────────────────────────────────────────
+    - name: Obtener versión latest de kubeseal
+      uri:
+        url: https://api.github.com/repos/bitnami-labs/sealed-secrets/releases/latest
+        return_content: true
+      register: kubeseal_release
+
+    - name: Instalar kubeseal
+      become: true
+      shell: |
+        VERSION="{{ (kubeseal_release.content | from_json).tag_name | regex_replace('^v', '') }}"
+        curl -sOL "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${VERSION}/kubeseal-${VERSION}-linux-amd64.tar.gz"
+        tar -xzf "kubeseal-${VERSION}-linux-amd64.tar.gz" kubeseal
+        install -m 755 kubeseal /usr/local/bin/kubeseal
+        rm -f kubeseal "kubeseal-${VERSION}-linux-amd64.tar.gz"
+      args:
+        creates: /usr/local/bin/kubeseal
+
+    # ── ArgoCD CLI ────────────────────────────────────────────────────────────
+    - name: Instalar ArgoCD CLI
+      become: true
+      get_url:
+        url: https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        dest: /usr/local/bin/argocd
+        mode: '0755'

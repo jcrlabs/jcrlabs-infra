@@ -1,33 +1,21 @@
 ---
-- name: Base OS hardening and K8s prerequisites
-  hosts: k8s_cluster
+- name: Base OS — paquetes, sysctl y swap
+  hosts: homelab
   become: true
-  roles:
-    - common
+  tags: base
+
   tasks:
-    - name: Disable swap
+    - name: Deshabilitar swap (sesión actual)
       command: swapoff -a
       changed_when: false
 
-    - name: Remove swap from fstab
+    - name: Eliminar swap de /etc/fstab
       replace:
         path: /etc/fstab
         regexp: '^([^#].*\sswap\s.*)$'
         replace: '# \1'
 
-    - name: Set sysctl params for K8s
-      sysctl:
-        name: "{{ item.name }}"
-        value: "{{ item.value }}"
-        sysctl_set: true
-        state: present
-        reload: true
-      loop:
-        - { name: net.bridge.bridge-nf-call-iptables, value: 1 }
-        - { name: net.bridge.bridge-nf-call-ip6tables, value: 1 }
-        - { name: net.ipv4.ip_forward, value: 1 }
-
-    - name: Load kernel modules
+    - name: Cargar módulos de kernel necesarios
       modprobe:
         name: "{{ item }}"
         state: present
@@ -35,7 +23,7 @@
         - overlay
         - br_netfilter
 
-    - name: Persist kernel modules
+    - name: Persistir módulos de kernel
       copy:
         dest: /etc/modules-load.d/k8s.conf
         content: |
@@ -43,20 +31,35 @@
           br_netfilter
         mode: '0644'
 
-    - name: Set hostname
-      hostname:
-        name: "{{ inventory_hostname }}"
+    - name: Configurar sysctl para K8s
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_set: true
+        state: present
+        reload: true
+      loop:
+        - { name: net.bridge.bridge-nf-call-iptables,  value: "1" }
+        - { name: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+        - { name: net.ipv4.ip_forward,                 value: "1" }
 
-    - name: Install base packages
+    - name: Instalar paquetes base
       apt:
         name:
           - curl
+          - wget
+          - git
+          - unzip
+          - jq
+          - socat
           - apt-transport-https
           - ca-certificates
           - gnupg
           - lsb-release
-          - jq
-          - htop
+          - zsh
           - vim
+          - htop
+          - build-essential
+          - python3-yaml
         state: present
         update_cache: true

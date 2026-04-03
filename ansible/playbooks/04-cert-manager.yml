@@ -1,0 +1,64 @@
+---
+# Requiere: CLOUDFLARE_API_TOKEN en el entorno o vault
+# Uso: ansible-playbook -i inventory.yml site.yml --tags cert-manager \
+#        -e "cloudflare_api_token=<TOKEN>"
+#
+# El token está en el backup:
+#   cluster-backup-20260403/cert-manager/secret.yaml → cloudflare-api-token
+- name: cert-manager + ClusterIssuer letsencrypt-cloudflare
+  hosts: homelab
+  become: false
+  tags: cert-manager
+  environment:
+    KUBECONFIG: "/home/{{ cluster_user }}/.kube/config"
+
+  vars:
+    # Pasar como: -e "cloudflare_api_token=PmtSQCx..."
+    cloudflare_api_token: "{{ lookup('env', 'CLOUDFLARE_API_TOKEN') }}"
+
+  tasks:
+    - name: Añadir repo de jetstack (cert-manager)
+      command: helm repo add jetstack https://charts.jetstack.io
+      changed_when: false
+
+    - name: Actualizar repos de Helm
+      command: helm repo update
+      changed_when: false
+
+    - name: Instalar cert-manager
+      command: >
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --namespace {{ cert_manager_namespace }}
+        --create-namespace
+        --version {{ cert_manager_version }}
+        --set installCRDs=true
+        --wait --timeout 5m
+      register: cm_result
+      changed_when: "'has been upgraded' in cm_result.stdout or 'has been deployed' in cm_result.stdout"
+
+    - name: Esperar a que cert-manager esté listo
+      command: kubectl rollout status deployment/cert-manager -n {{ cert_manager_namespace }} --timeout=3m
+      changed_when: false
+
+    # ── Cloudflare API token secret ──────────────────────────────────────────
+    - name: Crear secret con Cloudflare API token
+      shell: |
+        kubectl create secret generic cloudflare-api-token \
+          --from-literal=api-token="{{ cloudflare_api_token }}" \
+          --namespace {{ cert_manager_namespace }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+      changed_when: true
+      no_log: true
+
+    # ── ClusterIssuer ────────────────────────────────────────────────────────
+    - name: Aplicar ClusterIssuer letsencrypt-cloudflare
+      command: kubectl apply -f {{ playbook_dir }}/../files/cert-manager/clusterissuer-cloudflare.yml
+      changed_when: true
+
+    - name: Verificar ClusterIssuer
+      command: kubectl get clusterissuer letsencrypt-cloudflare -o jsonpath='{.status.conditions[0].type}'
+      register: issuer_status
+      retries: 10
+      delay: 15
+      until: issuer_status.stdout == "Ready"
+      changed_when: false
