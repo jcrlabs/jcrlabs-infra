@@ -27,4 +27,3 @@ sealed_secrets_backup: "{{ backup_dir }}/cluster-backup-20260403/sealed-secrets/
 
 # ─── Repo ─────────────────────────────────────────────────────────────────────
 infra_repo: https://github.com/jcrlabs/jcrlabs-infra.git
-
