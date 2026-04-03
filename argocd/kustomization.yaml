@@ -9,3 +9,13 @@ resources:
   - applications/portfolio-gateway-test.yaml
   - applications/portfolio-landing-prod.yaml
   - applications/portfolio-landing-test.yaml
+  - applications/blog-back-prod.yaml
+  - applications/blog-back-test.yaml
+  - applications/blog-front-prod.yaml
+  - applications/blog-front-test.yaml
+  - applications/blog-mongodb-prod.yaml
+  - applications/blog-mongodb-test.yaml
+  - applications/inventory-back-prod.yaml
+  - applications/inventory-back-test.yaml
+  - applications/inventory-front-prod.yaml
+  - applications/inventory-front-test.yaml

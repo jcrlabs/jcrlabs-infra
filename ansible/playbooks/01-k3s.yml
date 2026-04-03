@@ -1,0 +1,54 @@
+---
+- name: K3s — instalación y kubeconfig
+  hosts: homelab
+  become: false
+  tags: k3s
+
+  tasks:
+    - name: Instalar K3s (sin Traefik, con nginx-ingress)
+      become: true
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - \
+          --disable traefik \
+          --write-kubeconfig-mode 644 \
+          --tls-san "api.{{ domain }}" \
+          --tls-san "$(curl -s ifconfig.me)" \
+          --tls-san "127.0.0.1"
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Esperar a que el nodo esté Ready
+      become: true
+      command: kubectl wait --for=condition=Ready node --all --timeout=180s
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      changed_when: false
+
+    - name: Crear directorio .kube
+      file:
+        path: "/home/{{ cluster_user }}/.kube"
+        state: directory
+        mode: '0700'
+
+    - name: Copiar kubeconfig al usuario
+      become: true
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "/home/{{ cluster_user }}/.kube/config"
+        owner: "{{ cluster_user }}"
+        group: "{{ cluster_user }}"
+        mode: '0600'
+        remote_src: true
+
+    - name: Añadir alias y autocompletado kubectl a .zshrc
+      blockinfile:
+        path: "/home/{{ cluster_user }}/.zshrc"
+        create: true
+        marker: "# {mark} ANSIBLE MANAGED — kubectl"
+        block: |
+          export KUBECONFIG=~/.kube/config
+          alias k=kubectl
+          alias kga='kubectl get all -A'
+          alias kgp='kubectl get pods -A'
+          source <(kubectl completion zsh)
+          complete -F __start_kubectl k

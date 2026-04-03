@@ -1,26 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: portfolio-gateway
+  name: inventory-back-test
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: portfolio
   source:
-    repoURL: https://github.com/jcrlabs/portfolio-gateway.git
-    targetRevision: main
+    repoURL: https://github.com/jcrlabs/inventory-back.git
+    targetRevision: develop
     path: deploy/helm
     helm:
       valueFiles:
         - values.yaml
-        - values-prod.yaml
-      parameters:
-        - name: secretName
-          value: ""
+        - values-test.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: portfolio
+    namespace: inventory-test
   syncPolicy:
     automated:
       prune: true

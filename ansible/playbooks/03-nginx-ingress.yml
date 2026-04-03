@@ -1,0 +1,33 @@
+---
+- name: nginx-ingress — IngressClass por defecto
+  hosts: homelab
+  become: false
+  tags: nginx-ingress
+  environment:
+    KUBECONFIG: "/home/{{ cluster_user }}/.kube/config"
+
+  tasks:
+    - name: Añadir repo de ingress-nginx
+      command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      changed_when: false
+
+    - name: Actualizar repos de Helm
+      command: helm repo update
+      changed_when: false
+
+    - name: Instalar ingress-nginx
+      command: >
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
+        --namespace {{ ingress_namespace }}
+        --create-namespace
+        --version {{ nginx_ingress_version }}
+        --set controller.ingressClassResource.default=true
+        --set controller.service.type=LoadBalancer
+        --set controller.metrics.enabled=true
+        --wait --timeout 5m
+      register: nginx_result
+      changed_when: "'has been upgraded' in nginx_result.stdout or 'has been deployed' in nginx_result.stdout"
+
+    - name: Verificar que nginx-ingress está listo
+      command: kubectl rollout status deployment/ingress-nginx-controller -n {{ ingress_namespace }} --timeout=3m
+      changed_when: false

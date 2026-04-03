@@ -1,0 +1,27 @@
+---
+# jcrlabs homelab — bootstrap completo
+# Uso: ansible-playbook -i inventory.yml site.yml
+# Uso (paso concreto): ansible-playbook -i inventory.yml site.yml --tags k3s
+#
+# Orden de ejecución:
+#   00-base          → paquetes, sysctl, swap
+#   01-k3s           → instala k3s, configura kubeconfig
+#   02-cli-tools     → helm, k9s, kubeseal, argocd CLI
+#   03-nginx-ingress → nginx-ingress como IngressClass por defecto
+#   04-cert-manager  → cert-manager + ClusterIssuer letsencrypt-cloudflare
+#   05-sealed-secrets→ restaura clave maestra del backup + instala controller
+#   06-argocd        → instala ArgoCD + aplica root app (sync de jcrlabs-infra)
+#   07-cloudflared   → restaura credenciales del backup + servicio systemd
+#   08-tailscale     → instala tailscale
+#   09-desktop       → X11 login automático + RustDesk
+
+- import_playbook: playbooks/00-base.yml
+- import_playbook: playbooks/01-k3s.yml
+- import_playbook: playbooks/02-cli-tools.yml
+- import_playbook: playbooks/03-nginx-ingress.yml
+- import_playbook: playbooks/04-cert-manager.yml
+- import_playbook: playbooks/05-sealed-secrets.yml
+- import_playbook: playbooks/06-argocd.yml
+- import_playbook: playbooks/07-cloudflared.yml
+- import_playbook: playbooks/08-tailscale.yml
+- import_playbook: playbooks/09-desktop.yml

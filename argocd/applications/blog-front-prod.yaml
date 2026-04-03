@@ -1,26 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: portfolio-gateway
+  name: blog-front
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: portfolio
   source:
-    repoURL: https://github.com/jcrlabs/portfolio-gateway.git
+    repoURL: https://github.com/jcrlabs/blog-front.git
     targetRevision: main
     path: deploy/helm
     helm:
       valueFiles:
         - values.yaml
         - values-prod.yaml
-      parameters:
-        - name: secretName
-          value: ""
   destination:
     server: https://kubernetes.default.svc
-    namespace: portfolio
+    namespace: blog
   syncPolicy:
     automated:
       prune: true
