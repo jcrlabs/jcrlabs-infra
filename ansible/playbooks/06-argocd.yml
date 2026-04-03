@@ -15,19 +15,19 @@
       command: helm repo update
       changed_when: false
 
+    - name: Renderizar values de ArgoCD con el dominio correcto
+      template:
+        src: "{{ playbook_dir }}/../files/argocd/values.yml.j2"
+        dest: /tmp/argocd-values.yml
+        mode: '0644'
+
     - name: Instalar ArgoCD
       command: >
         helm upgrade --install argocd argo/argo-cd
         --namespace {{ argocd_namespace }}
         --create-namespace
         --version {{ argocd_version }}
-        --set configs.params."server\.insecure"=true
-        --set server.ingress.enabled=true
-        --set server.ingress.ingressClassName=nginx
-        --set "server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-cloudflare"
-        --set "server.ingress.hosts[0]=argocd.{{ domain }}"
-        --set "server.ingress.tls[0].secretName=argocd-tls"
-        --set "server.ingress.tls[0].hosts[0]=argocd.{{ domain }}"
+        --values /tmp/argocd-values.yml
         --wait --timeout 5m
       register: argo_result
       changed_when: "'has been upgraded' in argo_result.stdout or 'has been deployed' in argo_result.stdout"
