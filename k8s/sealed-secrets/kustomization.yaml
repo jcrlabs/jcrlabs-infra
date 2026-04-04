@@ -1,12 +1,24 @@
-# Sealed Secrets are generated with kubeseal and committed here.
-# To create a new sealed secret:
-#   kubectl create secret generic my-secret --dry-run=client -o yaml | \
-#     kubeseal --controller-namespace sealed-secrets --format yaml > my-sealed-secret.yaml
-#
-# Example cloudflare API token (regenerate with kubeseal before applying):
-# kubeseal --fetch-cert --controller-namespace sealed-secrets > pub-cert.pem
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources: []
-  # Add sealed secret files here as they are created
-  # - cloudflare-api-token.yaml
+resources:
+  # GHCR pull secrets — un SealedSecret por namespace
+  - ghcr-pull-secret.yaml
+  - ghcr-pull-secret-portfolio.yaml
+  - ghcr-pull-secret-portfolio-test.yaml
+  - ghcr-pull-secret-blog.yaml
+  - ghcr-pull-secret-blog-test.yaml
+  - ghcr-pull-secret-inventory.yaml
+  - ghcr-pull-secret-inventory-test.yaml
+  - ghcr-pull-secret-dashboard.yaml
+  - ghcr-pull-secret-dashboard-test.yaml
+  - ghcr-pull-secret-chat.yaml
+  - ghcr-pull-secret-chat-test.yaml
+  - ghcr-pull-secret-fincontrol.yaml
+  - ghcr-pull-secret-fincontrol-test.yaml
+  - ghcr-pull-secret-home.yaml
+  - ghcr-pull-secret-home-test.yaml
+  # App secrets
+  - inventory-back-secrets.yaml
+  - inventory-back-secrets-test.yaml
+  # ArgoCD repo credentials (acceso a repos privados de GitHub)
+  - jcrlabs-repo-creds.yaml
