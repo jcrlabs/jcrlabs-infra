@@ -65,7 +65,9 @@ spec:
             - name: data
               mountPath: /data/db
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
