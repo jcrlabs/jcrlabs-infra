@@ -20,4 +20,8 @@ resources:
   - applications/inventory-back-test.yaml
   - applications/inventory-front-prod.yaml
   - applications/inventory-front-test.yaml
+  - applications/fincontrol-back-prod.yaml
+  - applications/fincontrol-back-test.yaml
+  - applications/fincontrol-front-prod.yaml
+  - applications/fincontrol-front-test.yaml
   - applications/sealed-secrets.yaml
