@@ -3,21 +3,13 @@ kind: Kustomization
 resources:
   # GHCR pull secrets — un SealedSecret por namespace
   - ghcr-pull-secret-portfolio.yaml
-  - ghcr-pull-secret-portfolio-test.yaml
   - ghcr-pull-secret-blog.yaml
-  - ghcr-pull-secret-blog-test.yaml
   - ghcr-pull-secret-inventory.yaml
-  - ghcr-pull-secret-inventory-test.yaml
   - ghcr-pull-secret-dashboard.yaml
-  - ghcr-pull-secret-dashboard-test.yaml
   - ghcr-pull-secret-chat.yaml
-  - ghcr-pull-secret-chat-test.yaml
   - ghcr-pull-secret-fincontrol.yaml
-  - ghcr-pull-secret-fincontrol-test.yaml
   - ghcr-pull-secret-home.yaml
-  - ghcr-pull-secret-home-test.yaml
   # App secrets
   - inventory-back-secrets.yaml
-  - inventory-back-secrets-test.yaml
   # ArgoCD repo credentials (acceso a repos privados de GitHub)
   - jcrlabs-repo-creds.yaml

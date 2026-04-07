@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: home-test
-  labels:
-    app.kubernetes.io/managed-by: argocd
-    env: test
-    project: home
