@@ -14,4 +14,6 @@ resources:
   - applications/inventory-front-prod.yaml
   - applications/fincontrol-back-prod.yaml
   - applications/fincontrol-front-prod.yaml
+  - applications/chat-back-prod.yaml
+  - applications/chat-front-prod.yaml
   - applications/sealed-secrets.yaml
