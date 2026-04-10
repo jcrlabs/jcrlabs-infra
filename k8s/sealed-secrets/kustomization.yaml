@@ -9,7 +9,6 @@ resources:
   - ghcr-pull-secret-chat.yaml
   - ghcr-pull-secret-fincontrol.yaml
   - ghcr-pull-secret-home.yaml
-  - ghcr-pull-secret-redkey-system.yaml
   # App secrets
   - inventory-back-secrets.yaml
   # ArgoCD repo credentials (acceso a repos privados de GitHub)
