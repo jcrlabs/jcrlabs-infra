@@ -17,4 +17,3 @@ resources:
   - applications/chat-back-prod.yaml
   - applications/chat-front-prod.yaml
   - applications/sealed-secrets.yaml
-  - applications/redkey-operator-prod.yaml

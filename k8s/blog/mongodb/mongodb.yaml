@@ -47,20 +47,19 @@ spec:
               memory: 256Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 768Mi
           livenessProbe:
-            exec:
-              command: [mongosh, --eval, "db.adminCommand('ping')"]
+            tcpSocket:
+              port: 27017
             initialDelaySeconds: 30
             periodSeconds: 30
-            timeoutSeconds: 10
             failureThreshold: 5
           readinessProbe:
             exec:
-              command: [mongosh, --eval, "db.adminCommand('ping')"]
+              command: [mongosh, --quiet, --eval, "db.adminCommand('ping')"]
             initialDelaySeconds: 15
             periodSeconds: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 20
           volumeMounts:
             - name: data
               mountPath: /data/db
