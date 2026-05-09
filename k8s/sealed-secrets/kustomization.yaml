@@ -9,6 +9,7 @@ resources:
   - ghcr-pull-secret-chat.yaml
   - ghcr-pull-secret-fincontrol.yaml
   - ghcr-pull-secret-home.yaml
+  - ghcr-pull-secret-compra.yaml
   # App secrets
   - inventory-back-secrets.yaml
   - chat-back-secrets.yaml
