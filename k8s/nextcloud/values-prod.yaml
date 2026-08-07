@@ -79,6 +79,15 @@ postgresql:
       enabled: true
       storageClass: local-path
       size: 8Gi
+    # El preset por defecto (nano, 128Mi) provoca OOMKill bajo carga de subida.
+    resourcesPreset: none
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
 # Redis para bloqueo transaccional de ficheros y caché.
 redis:
@@ -92,6 +101,14 @@ redis:
       enabled: true
       storageClass: local-path
       size: 2Gi
+    resourcesPreset: none
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
   replica:
     replicaCount: 0
 
