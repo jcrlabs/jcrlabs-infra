@@ -18,4 +18,6 @@ resources:
   - applications/chat-front-prod.yaml
   - applications/compra-back-prod.yaml
   - applications/compra-front-prod.yaml
+  - applications/nextcloud-storage.yaml
+  - applications/nextcloud.yaml
   - applications/sealed-secrets.yaml

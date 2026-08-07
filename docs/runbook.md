@@ -78,6 +78,45 @@ kubectl create secret generic cloudflare-api-token \
   --format yaml > k8s/sealed-secrets/cloudflare-api-token.yaml
 ```
 
+## Nextcloud NAS (nas.jcrlabs.net)
+
+Nextcloud vive en el namespace `nextcloud`. BD PostgreSQL y Redis como subcharts
+(en SSD, `local-path`). Los datos de usuario van en una carpeta del disco del
+sistema (`/` = sdb2, ~575 GB libres), expuesta como PV `local` estático
+(`nextcloud-data-pv`, path `/var/lib/nextcloud-data`, reclaimPolicy `Retain`).
+
+> **No se formatea ni se particiona nada.** El disco `sda2` (LUKS cifrado) queda
+> intacto. Solo se crea un directorio dentro del filesystem raíz existente.
+
+### Preparar el directorio de datos (una sola vez, en el host)
+
+```bash
+sudo mkdir -p /var/lib/nextcloud-data
+sudo chown -R 33:33 /var/lib/nextcloud-data   # uid/gid www-data del contenedor
+```
+
+### Secretos
+
+Tres SealedSecrets en `k8s/sealed-secrets/nextcloud-secrets.yaml`:
+`nextcloud-admin` (usuario/password admin), `nextcloud-db` (postgres-password +
+password del usuario `nextcloud`) y `nextcloud-redis` (redis-password). Se sellan
+con `kubeseal` como el resto (ver sección Sealed Secrets). La contraseña de admin
+se guarda en el gestor de contraseñas del equipo.
+
+### Operación
+
+```bash
+kubectl -n nextcloud get pods,pvc,ingress
+kubectl -n nextcloud exec deploy/nextcloud -c nextcloud -- \
+  php occ status                            # estado de la instancia
+kubectl -n nextcloud exec deploy/nextcloud -c nextcloud -- \
+  php occ maintenance:mode --on             # antes de tareas de mantenimiento
+```
+
+> Cloudflare (plan free) limita cada request proxied a ~100 MB. Nextcloud sube en
+> chunks por defecto (web y cliente de escritorio), así que ficheros grandes
+> funcionan igual a través del túnel.
+
 ## Monitoring
 
 ### Ver alertas activas

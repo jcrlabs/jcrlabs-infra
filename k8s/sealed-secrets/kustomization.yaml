@@ -13,5 +13,6 @@ resources:
   # App secrets
   - inventory-back-secrets.yaml
   - chat-back-secrets.yaml
+  - nextcloud-secrets.yaml
   # ArgoCD repo credentials (acceso a repos privados de GitHub)
   - jcrlabs-repo-creds.yaml

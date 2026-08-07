@@ -1,0 +1,159 @@
+# Values de producción para el chart oficial nextcloud/nextcloud (9.2.5, appVersion 34).
+# BD PostgreSQL y Redis como subcharts. Datos de usuario en HDD (existingClaim),
+# config/apps en SSD (local-path). Expuesto en nas.jcrlabs.net vía nginx + Cloudflare Tunnel.
+
+image:
+  flavor: apache
+
+replicaCount: 1
+
+nextcloud:
+  host: nas.jcrlabs.net
+  # Credenciales de admin desde SealedSecret nextcloud-admin.
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-admin
+    usernameKey: nextcloud-username
+    passwordKey: nextcloud-password
+  trustedDomains:
+    - nas.jcrlabs.net
+  # Detrás de nginx-ingress + Cloudflare Tunnel: forzar https y confiar en el proxy.
+  extraEnv:
+    - name: OVERWRITEPROTOCOL
+      value: https
+    - name: OVERWRITEHOST
+      value: nas.jcrlabs.net
+    - name: OVERWRITECLIURL
+      value: https://nas.jcrlabs.net
+    - name: TRUSTED_PROXIES
+      value: 10.42.0.0/16
+    - name: PHP_UPLOAD_LIMIT
+      value: 16G
+    - name: PHP_MEMORY_LIMIT
+      value: 1024M
+  # Ajustes extra de Nextcloud (php config para subidas grandes).
+  phpConfigs:
+    zz-upload.ini: |
+      upload_max_filesize = 16G
+      post_max_size = 16G
+      max_input_time = 3600
+      max_execution_time = 3600
+  configs:
+    proxy.config.php: |
+      <?php
+      $CONFIG = array(
+        'overwriteprotocol' => 'https',
+        'default_phone_region' => 'ES',
+        'maintenance_window_start' => 1,
+      );
+
+# Base de datos: PostgreSQL (subchart), sin BD interna SQLite.
+internalDatabase:
+  enabled: false
+
+# Nextcloud lee usuario/password de este secret (claves db-username/db-password).
+# Con existingSecret.enabled: true el chart NO genera su propio secret nextcloud-db.
+externalDatabase:
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-db
+    usernameKey: db-username
+    passwordKey: db-password
+
+postgresql:
+  enabled: true
+  auth:
+    # Claves dentro del SealedSecret nextcloud-db. `password` == `db-password`.
+    existingSecret: nextcloud-db
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+  global:
+    postgresql:
+      auth:
+        username: nextcloud
+        database: nextcloud
+        existingSecret: nextcloud-db
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 8Gi
+
+# Redis para bloqueo transaccional de ficheros y caché.
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: nextcloud-redis
+    existingSecretPasswordKey: redis-password
+  master:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 2Gi
+  replica:
+    replicaCount: 0
+
+# Almacenamiento.
+persistence:
+  # /var/www/html (config, apps, themes) en SSD gestionado dinámicamente.
+  enabled: true
+  storageClass: local-path
+  size: 12Gi
+  accessMode: ReadWriteOnce
+  # Datos de usuario en el HDD dedicado (PVC estático creado en storage.yaml).
+  nextcloudData:
+    enabled: true
+    existingClaim: nextcloud-data
+
+# El contenedor corre como www-data (uid/gid 33). fsGroup para el volumen local.
+podSecurityContext:
+  fsGroup: 33
+securityContext:
+  runAsUser: 33
+  runAsGroup: 33
+  runAsNonRoot: true
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /.well-known/carddav { return 301 $scheme://$host/remote.php/dav; }
+      location = /.well-known/caldav  { return 301 $scheme://$host/remote.php/dav; }
+      location = /.well-known/webfinger   { return 301 $scheme://$host/index.php/.well-known/webfinger; }
+      location = /.well-known/nodeinfo     { return 301 $scheme://$host/index.php/.well-known/nodeinfo; }
+  tls:
+    - secretName: nas-jcrlabs-tls
+      hosts:
+        - nas.jcrlabs.net
+
+# Cron de Nextcloud como sidecar/CronJob del chart.
+cronjob:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Liveness/startup holgados: la primera instalación (install + migraciones) tarda.
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 60
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 60
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 60

@@ -9,6 +9,8 @@ spec:
   description: jcrlabs portfolio projects
   sourceRepos:
     - https://github.com/jcrlabs/*
+    # Chart oficial de Nextcloud (repo Helm público)
+    - https://nextcloud.github.io/helm/
   destinations:
     - namespace: home
       server: https://kubernetes.default.svc
@@ -40,9 +42,16 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: compra
       server: https://kubernetes.default.svc
+    - namespace: nextcloud
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ''
       kind: Namespace
+    # Nextcloud: PV local sobre el HDD dedicado + su StorageClass
+    - group: ''
+      kind: PersistentVolume
+    - group: storage.k8s.io
+      kind: StorageClass
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
