@@ -107,13 +107,9 @@ persistence:
     enabled: true
     existingClaim: nextcloud-data
 
-# El contenedor corre como www-data (uid/gid 33). fsGroup para el volumen local.
-podSecurityContext:
-  fsGroup: 33
-securityContext:
-  runAsUser: 33
-  runAsGroup: 33
-  runAsNonRoot: true
+# La imagen apache arranca como root (su entrypoint prepara PHP/config y luego
+# baja a www-data uid 33). No forzamos runAsNonRoot: rompería el arranque.
+# El directorio de datos ya es propiedad de 33:33 en el host.
 
 ingress:
   enabled: true
