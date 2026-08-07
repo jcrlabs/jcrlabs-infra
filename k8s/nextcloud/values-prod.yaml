@@ -116,14 +116,11 @@ ingress:
   className: nginx
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+    # proxy-body-size 0 = sin límite de subida en nginx (los .well-known los
+    # resuelve Nextcloud vía .htaccess; server-snippet está deshabilitado en este cluster).
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/server-snippet: |
-      location = /.well-known/carddav { return 301 $scheme://$host/remote.php/dav; }
-      location = /.well-known/caldav  { return 301 $scheme://$host/remote.php/dav; }
-      location = /.well-known/webfinger   { return 301 $scheme://$host/index.php/.well-known/webfinger; }
-      location = /.well-known/nodeinfo     { return 301 $scheme://$host/index.php/.well-known/nodeinfo; }
   tls:
     - secretName: nas-jcrlabs-tls
       hosts:
