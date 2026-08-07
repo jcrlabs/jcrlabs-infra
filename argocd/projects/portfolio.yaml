@@ -28,10 +28,6 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: dashboard-test
       server: https://kubernetes.default.svc
-    - namespace: chat
-      server: https://kubernetes.default.svc
-    - namespace: chat-test
-      server: https://kubernetes.default.svc
     - namespace: fincontrol
       server: https://kubernetes.default.svc
     - namespace: fincontrol-test
