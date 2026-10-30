@@ -16,6 +16,10 @@ resources:
   - applications/fincontrol-front-prod.yaml
   - applications/compra-back-prod.yaml
   - applications/compra-front-prod.yaml
+  - applications/barber-back-prod.yaml
+  - applications/barber-front-prod.yaml
+  - applications/barber-back-test.yaml
+  - applications/barber-front-test.yaml
   - applications/nextcloud-storage.yaml
   - applications/nextcloud.yaml
   - applications/sealed-secrets.yaml
