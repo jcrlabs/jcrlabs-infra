@@ -10,6 +10,7 @@
 #   GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
 #   GITHUB_CLIENT_ID=... GITHUB_CLIENT_SECRET=... \
 #   TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... \
+#   BOOTSTRAP_ADMIN_LOGIN=admin BOOTSTRAP_ADMIN_PASSWORD=... \
 #   ./scripts/seal-barber-secrets.sh
 #
 # Avisos de reservas: si no hay NTFY_URL se genera un topic privado aleatorio en ntfy.sh
@@ -70,6 +71,8 @@ for NS in barber; do
     --from-literal=NTFY_TOKEN="$(pick NTFY_TOKEN)" \
     --from-literal=TELEGRAM_BOT_TOKEN="$(pick TELEGRAM_BOT_TOKEN)" \
     --from-literal=TELEGRAM_CHAT_ID="$(pick TELEGRAM_CHAT_ID)" \
+    --from-literal=BOOTSTRAP_ADMIN_LOGIN="$(pick BOOTSTRAP_ADMIN_LOGIN)" \
+    --from-literal=BOOTSTRAP_ADMIN_PASSWORD="$(pick BOOTSTRAP_ADMIN_PASSWORD)" \
     --dry-run=client -o yaml | seal > "$OUT/barber-back-secrets$SUFFIX.yaml"
 
   echo "▶ ghcr-pull-secret ($NS)"
