@@ -12,8 +12,6 @@ resources:
   - applications/blog-mongodb-prod.yaml
   - applications/inventory-back-prod.yaml
   - applications/inventory-front-prod.yaml
-  - applications/fincontrol-back-prod.yaml
-  - applications/fincontrol-front-prod.yaml
   - applications/compra-back-prod.yaml
   - applications/compra-front-prod.yaml
   - applications/barber-back-prod.yaml

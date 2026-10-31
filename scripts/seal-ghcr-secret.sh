@@ -15,7 +15,7 @@ GITHUB_USER="jonathancaamano"
 
 echo "▶ Sellando ghcr-pull-secret para todos los namespaces de producción..."
 
-for NS in portfolio portfolio-test blog blog-test inventory inventory-test dashboard dashboard-test chat chat-test fincontrol fincontrol-test home home-test; do
+for NS in portfolio portfolio-test blog blog-test inventory inventory-test dashboard dashboard-test chat chat-test home home-test; do
   kubectl create secret docker-registry ghcr-pull-secret \
     --docker-server=ghcr.io \
     --docker-username="$GITHUB_USER" \
