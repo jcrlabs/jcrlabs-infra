@@ -1,5 +1,5 @@
 #!/bin/bash
-# Genera y sella los secrets de barber-back (prod y test) y el pull secret de GHCR.
+# Genera y sella los secrets de barber-back (solo prod) y el pull secret de GHCR.
 #
 # - DB_PASSWORD y JWT_PRIVATE_KEY se generan aleatoriamente la primera vez.
 # - Si el secret ya existe en el cluster, se REUTILIZAN (cambiarlos rompería Postgres y las sesiones).
@@ -37,8 +37,8 @@ current() {
   kubectl get secret barber-back-secrets -n "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d 2>/dev/null || true
 }
 
-for NS in barber barber-test; do
-  SUFFIX=""; [ "$NS" = "barber-test" ] && SUFFIX="-test"
+for NS in barber; do
+  SUFFIX=""
   echo "▶ barber-back-secrets ($NS)"
 
   DB_PASSWORD="$(current "$NS" DB_PASSWORD)"
@@ -85,4 +85,4 @@ for NS in barber barber-test; do
   fi
 done
 
-echo "✅ SealedSecrets generados en k8s/sealed-secrets/ (barber, barber-test)"
+echo "✅ SealedSecrets generados en k8s/sealed-secrets/ (barber)"
