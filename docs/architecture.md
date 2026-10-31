@@ -34,7 +34,7 @@ ingress-nginx  ←  LoadBalancer k3d  (172.18.0.2–7:80/443)
     ├── dashboard.jcrlabs.net   → ns: dashboard
     ├── chat.jcrlabs.net        → ns: chat
     ├── fincontrol.jcrlabs.net  → ns: fincontrol
-    ├── edgarbarber.jcrlabs.net → ns: barber (test: barber-test)
+    ├── edgarbarber.jcrlabs.net → ns: barber
     ├── grafana.jcrlabs.net     → ns: monitoring
     └── argocd.jcrlabs.net      → ns: argocd
 ```

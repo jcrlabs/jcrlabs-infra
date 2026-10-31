@@ -40,8 +40,6 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: barber
       server: https://kubernetes.default.svc
-    - namespace: barber-test
-      server: https://kubernetes.default.svc
     - namespace: nextcloud
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:

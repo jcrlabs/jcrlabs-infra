@@ -10,11 +10,9 @@ resources:
   - ghcr-pull-secret-home.yaml
   - ghcr-pull-secret-compra.yaml
   - ghcr-pull-secret-barber.yaml
-  - ghcr-pull-secret-barber-test.yaml
   # App secrets
   - inventory-back-secrets.yaml
   - barber-back-secrets.yaml
-  - barber-back-secrets-test.yaml
   - nextcloud-secrets.yaml
   # ArgoCD repo credentials (acceso a repos privados de GitHub)
   - jcrlabs-repo-creds.yaml
