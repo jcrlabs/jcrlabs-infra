@@ -9,7 +9,11 @@
 #   ADMIN_EMAILS=yo@dominio.com \
 #   GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
 #   GITHUB_CLIENT_ID=... GITHUB_CLIENT_SECRET=... \
+#   TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... \
 #   ./scripts/seal-barber-secrets.sh
+#
+# Avisos de reservas: si no hay NTFY_URL se genera un topic privado aleatorio en ntfy.sh
+# (suscríbete a él desde la app ntfy del móvil para recibir cada cita con botón de llamar).
 #
 # Pull secret de GHCR: usa GHCR_PAT si se define; si no, copia el de GHCR_SOURCE_NS (por defecto: inventory).
 
@@ -48,6 +52,10 @@ for NS in barber barber-test; do
 
   pick() { local v="${!1:-}"; [ -n "$v" ] && echo "$v" || current "$NS" "$1"; }
 
+  NTFY="$(pick NTFY_URL)"
+  [ -n "$NTFY" ] || NTFY="https://ntfy.sh/edgarbarber${SUFFIX}-$(openssl rand -hex 12)"
+  echo "  avisos ntfy: $NTFY"
+
   kubectl create secret generic barber-back-secrets \
     --namespace="$NS" \
     --from-literal=DB_USER=barber \
@@ -58,6 +66,10 @@ for NS in barber barber-test; do
     --from-literal=GOOGLE_CLIENT_SECRET="$(pick GOOGLE_CLIENT_SECRET)" \
     --from-literal=GITHUB_CLIENT_ID="$(pick GITHUB_CLIENT_ID)" \
     --from-literal=GITHUB_CLIENT_SECRET="$(pick GITHUB_CLIENT_SECRET)" \
+    --from-literal=NTFY_URL="$NTFY" \
+    --from-literal=NTFY_TOKEN="$(pick NTFY_TOKEN)" \
+    --from-literal=TELEGRAM_BOT_TOKEN="$(pick TELEGRAM_BOT_TOKEN)" \
+    --from-literal=TELEGRAM_CHAT_ID="$(pick TELEGRAM_CHAT_ID)" \
     --dry-run=client -o yaml | seal > "$OUT/barber-back-secrets$SUFFIX.yaml"
 
   echo "▶ ghcr-pull-secret ($NS)"
