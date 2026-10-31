@@ -73,6 +73,11 @@ for NS in barber; do
     --from-literal=TELEGRAM_CHAT_ID="$(pick TELEGRAM_CHAT_ID)" \
     --from-literal=BOOTSTRAP_ADMIN_LOGIN="$(pick BOOTSTRAP_ADMIN_LOGIN)" \
     --from-literal=BOOTSTRAP_ADMIN_PASSWORD="$(pick BOOTSTRAP_ADMIN_PASSWORD)" \
+    --from-literal=SMTP_HOST="$(pick SMTP_HOST)" \
+    --from-literal=SMTP_PORT="$(pick SMTP_PORT)" \
+    --from-literal=SMTP_USER="$(pick SMTP_USER)" \
+    --from-literal=SMTP_PASSWORD="$(pick SMTP_PASSWORD)" \
+    --from-literal=SMTP_FROM="$(pick SMTP_FROM)" \
     --dry-run=client -o yaml | seal > "$OUT/barber-back-secrets$SUFFIX.yaml"
 
   echo "▶ ghcr-pull-secret ($NS)"
